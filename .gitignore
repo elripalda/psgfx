@@ -1,0 +1,7 @@
+build/
+*.o
+*.exe
+psgfx.json
+ps5-art-studio.json
+__pycache__/
+fake-ps5/
