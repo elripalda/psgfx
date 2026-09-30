@@ -1,0 +1,26 @@
+PSGFX 1.0
+Custom icons and backgrounds for your PS5 homebrew and games.
+
+BEFORE YOU START
+ - PS5 Upload's payload must be running on your PS5 (the same setup you use to upload homebrew).
+ - Your PC and PS5 must be on the same network.
+
+STEPS
+ 1. Double-click PSGFX.exe. PSGFX opens in your browser.
+    (If Windows SmartScreen warns, click "More info" > "Run anyway".
+     If the firewall asks, allow it on private networks.)
+ 2. Type your PS5's IP address and click Connect.
+ 3. Pick a homebrew app or an installed game from the list.
+ 4. Drop an image on the preview's tile (icon) or background (background),
+    or use the "Choose image" buttons. Any PNG or JPEG works.
+ 5. Close that app or game on the PS5, then click "Apply to PS5".
+ 6. Restart the PS5 to see the new art.
+
+UNDO
+ - Select the app and click "Restore original art".
+
+TIPS
+ - Best results: icons 512x512 or larger, backgrounds 3840x2160.
+ - A game update may bring back that game's original art. Just apply yours again.
+ - Your PS5 IP is saved in psgfx.json next to PSGFX.exe.
+ - To quit, close the black console window.
