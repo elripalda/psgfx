@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64 zip
+
+      - name: Build PSGFX.exe
+        run: bash build.sh
+
+      - name: Package
+        run: |
+          mkdir -p dist/PSGFX
+          cp build/PSGFX.exe dist/PSGFX/
+          cp release/HOW-TO.txt dist/PSGFX/
+          cd dist && zip -r PSGFX-windows.zip PSGFX
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PSGFX-windows
+          path: dist/PSGFX-windows.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PSGFX-windows.zip
+          generate_release_notes: true
