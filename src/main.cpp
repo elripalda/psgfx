@@ -71,6 +71,11 @@ static ps5::Client client() {
 static std::string lower(std::string s) { for (auto &ch : s) ch = (char)tolower((unsigned char)ch); return s; }
 static bool ends_with(const std::string &s, const std::string &t) { return s.size() >= t.size() && s.compare(s.size() - t.size(), t.size(), t) == 0; }
 static std::string appmeta(const std::string &id) { return "/user/appmeta/" + id; }
+// Games PS5 Upload runs from a mounted image (ShadowMount+, or its own mounts). Their sce_sys is
+// inside the image, read-only or nearly full, so their art is changed like an installed game's.
+static bool mounted_image(const std::string &src) {
+    return src.rfind("/mnt/shadowmnt/", 0) == 0 || src.rfind("/mnt/ps5upload/", 0) == 0;
+}
 
 // ─────────────────────────────── PS5 file helpers ─────────────────────
 static json list_dir(ps5::Client &c, const std::string &dir) {
@@ -290,10 +295,12 @@ static json layout_presets() {
 static json list_apps() {
     auto c = client();
     std::map<std::string, std::string> src, name;
+    std::set<std::string> mounted;
     json reg = json::parse(c.call_str(ps5::APP_LIST_REGISTERED, "", ps5::APP_LIST_REGISTERED_ACK));
     for (auto &a : reg.value("apps", json::array())) {
         std::string id = a.value("title_id", "");
         src[id] = a.value("src", "");
+        if (a.value("image_backed", false) || mounted_image(src[id])) mounted.insert(id);
         std::string n = a.value("title_name", "");
         if (n != id) name[id] = n;
     }
@@ -315,7 +322,7 @@ static json list_apps() {
 
     json out = json::array();
     for (auto &[id, s] : src) {
-        std::string kind = !s.empty() ? "homebrew"
+        std::string kind = mounted.count(id) ? "game" : !s.empty() ? "homebrew"
                          : ((metas.count(id) || in_db.count(id)) && id.rfind("NPXS", 0) != 0) ? "game" : "other";
         std::string n = name.count(id) ? name[id] : "";
         if (n.empty() && kind != "other" && !have_db) n = meta_title(c, id);
@@ -613,7 +620,8 @@ static bool game_restore_db(ps5::Client &c, const std::string &id, json &log) {
     return true;
 }
 
-static json do_apply(const std::string &id, const std::string &src, const std::string &kind_of_app) {
+static json do_apply(const std::string &id, const std::string &src, std::string kind_of_app) {
+    if (mounted_image(src)) kind_of_app = "game";
     json log = json::array();
     std::map<std::string, Staged> staged;
     { std::lock_guard<std::mutex> l(g_mu); staged = g_staged; }
@@ -663,7 +671,8 @@ static json do_apply(const std::string &id, const std::string &src, const std::s
     return {{"ok", true}, {"log", log}};
 }
 
-static json do_restore(const std::string &id, const std::string &src, const std::string &kind_of_app) {
+static json do_restore(const std::string &id, const std::string &src, std::string kind_of_app) {
+    if (mounted_image(src)) kind_of_app = "game";
     json log = json::array();
     auto c = client();
     const std::string dir = kind_of_app == "game" ? appmeta(id) : src + "/sce_sys";
@@ -740,7 +749,7 @@ static json do_rename(const std::string &id, const std::string &src, const std::
         for (auto &x : lines) log.push_back(x);
         upload_db(orig, db, "Before renaming " + t->name, log);
     }
-    if (kind_of_app == "homebrew" && !src.empty()) rename_homebrew_param(c, id, src, name, log);
+    if (kind_of_app == "homebrew" && !src.empty() && !mounted_image(src)) rename_homebrew_param(c, id, src, name, log);
     log.push_back("Done. Restart the PS5 to see the new name.");
     return {{"ok", true}, {"log", log}, {"name", name}};
 }
