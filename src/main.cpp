@@ -8,6 +8,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "imaging.h"
 #include "ps5client.h"
+#include "ftp.h"
+#include "layout.h"
 #include "lib/json.hpp"
 
 #include <atomic>
@@ -18,11 +20,14 @@
 #include <set>
 #include <algorithm>
 #include <sstream>
+#include <chrono>
+#include <filesystem>
+#include <memory>
 #ifdef _WIN32
 #include <shellapi.h>
 #include <tlhelp32.h>
 #endif
-#define STUDIO_VERSION "1.0"
+#define STUDIO_VERSION "1.1"
 
 using json = nlohmann::json;
 
@@ -42,6 +47,7 @@ static std::map<std::string, Staged> g_staged;           // "icon" | "background
 static std::map<std::string, std::vector<uint8_t>> g_icon_cache;
 static std::string g_config_path = "psgfx.json";
 static std::string g_legacy_config_path;   // pre-1.0 name, read once if present
+static std::string g_data_dir = "PSGFX Layout";   // home-layout backups and presets, next to the exe
 
 static void load_config() {
     std::ifstream f(g_config_path);
@@ -379,6 +385,171 @@ static json do_restore(const std::string &id, const std::string &src, const std:
     return {{"ok", true}, {"log", log}};
 }
 
+// ─────────────────────────────── home layout ──────────────────────────
+// Edits the home-screen database through PS5 Upload's built-in FTP server (see ftp.h).
+// Every apply re-downloads the database, saves it to PSGFX Layout/backups first, edits
+// a copy in memory, checks it, then uploads it.
+namespace fs = std::filesystem;
+static std::mutex g_layout_mu;                       // one layout operation at a time
+static std::mutex g_ftp_mu;
+static std::unique_ptr<ftp::Session> g_ftp;
+static std::string g_layout_user;
+static std::map<std::string, std::vector<uint8_t>> g_tile_img_cache;
+
+static fs::path data_path(const std::string &sub) { fs::path p = fs::path(g_data_dir) / sub; fs::create_directories(p); return p; }
+
+static std::string now_stamp(const char *fmt) {
+    auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    tm l{};
+#ifdef _WIN32
+    localtime_s(&l, &t);
+#else
+    localtime_r(&t, &l);
+#endif
+    char b[64]; strftime(b, sizeof b, fmt, &l); return b;
+}
+
+// Runs fn with a live FTP session, reconnecting once if the old one has gone stale.
+template <class F> static auto with_ftp(F fn) {
+    std::lock_guard<std::mutex> l(g_ftp_mu);
+    for (int attempt = 0;; attempt++) {
+        try {
+            if (!g_ftp) {
+                auto c = client();
+                int port = ftp::start_server(c);
+                if (const char *e = getenv("PS5AS_FTP_PORT")) port = atoi(e);   // test hook
+                g_ftp = std::make_unique<ftp::Session>(c.host, port);
+            }
+            return fn(*g_ftp);
+        } catch (const ps5::Error &) {
+            g_ftp.reset();
+            if (attempt) throw;
+        }
+    }
+}
+
+static std::vector<uint8_t> read_local(const fs::path &p) {
+    std::ifstream f(p, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), {});
+}
+static void write_local(const fs::path &p, const std::vector<uint8_t> &d) {
+    std::ofstream f(p, std::ios::binary); f.write((const char *)d.data(), (std::streamsize)d.size());
+    if (!f) throw ps5::Error("Couldn't save " + p.u8string());
+}
+
+static std::string make_backup(const std::vector<uint8_t> &db, const std::string &label) {
+    std::string id = now_stamp("%Y-%m-%d_%H%M%S");
+    fs::path dir = data_path("backups") / id;
+    for (int n = 2; fs::exists(dir); n++) dir = data_path("backups") / (id + "_" + std::to_string(n));
+    fs::create_directories(dir);
+    write_local(dir / "app.db", db);
+    json m = {{"id", dir.filename().u8string()}, {"label", label}, {"ps5", g_ip}, {"created", now_stamp("%Y-%m-%d %H:%M:%S")}};
+    std::ofstream(dir / "backup.json") << m.dump(2);
+    return dir.filename().u8string();
+}
+
+static json layout_state(const std::vector<uint8_t> &db_bytes, std::vector<std::string> extra_warn = {}) {
+    layout::DB db(db_bytes);
+    auto info = layout::analyze(db, g_layout_user);
+    json j = info.to_json();
+    for (auto &w : extra_warn) j["warnings"].push_back(w);
+    j["ok"] = true;
+    return j;
+}
+
+static std::vector<uint8_t> pull_db(std::vector<std::string> *warn = nullptr) {
+    return with_ftp([&](ftp::Session &f) {
+        if (warn)
+            for (auto &n : f.list(layout::DB_DIR))
+                if (n == "app.db-wal" || n == "app.db-journal")
+                    warn->push_back("The console has unsaved home-screen changes (" + n + "). For the most accurate result, restart the PS5 and reconnect.");
+        auto b = f.get(layout::DB_PATH);
+        if (b.empty()) throw ps5::Error("The PS5 sent an empty home-screen database.");
+        return b;
+    });
+}
+
+static json layout_load(const std::string &user) {
+    std::lock_guard<std::mutex> l(g_layout_mu);
+    g_layout_user = user;
+    { std::lock_guard<std::mutex> c(g_mu); g_tile_img_cache.clear(); }
+    std::vector<std::string> warn;
+    auto db = pull_db(&warn);
+    fs::path marker = data_path("backups") / (".original-" + g_ip);
+    if (!fs::exists(marker)) { make_backup(db, "Original - first time PSGFX read this console"); std::ofstream(marker) << "1"; }
+    return layout_state(db, warn);
+}
+
+static std::vector<uint8_t> tile_image(const std::string &path) {
+    if (path.empty() || path[0] != '/' || path.find("..") != std::string::npos) return {};
+    std::string ext = lower(path.substr(path.find_last_of('.') + 1));
+    if (ext != "png" && ext != "dds" && ext != "jpg") return {};
+    {
+        std::lock_guard<std::mutex> l(g_mu);
+        auto it = g_tile_img_cache.find(path);
+        if (it != g_tile_img_cache.end()) return it->second;
+    }
+    std::vector<uint8_t> out;
+    try {
+        auto b = with_ftp([&](ftp::Session &f) { return f.get(path); });
+        img::Image im;
+        if (ext == "dds") { if (img::from_bc7_dds(b, im)) out = img::to_png(img::resize(im, 960, 540)); }
+        else out = std::move(b);
+    } catch (...) {}
+    std::lock_guard<std::mutex> l(g_mu);
+    g_tile_img_cache[path] = out;
+    return out;
+}
+
+static json layout_apply(const json &req) {
+    std::lock_guard<std::mutex> l(g_layout_mu);
+    auto orig = pull_db();
+    std::string backup = make_backup(orig, "Before changes");
+    std::vector<std::string> log = {"Backup saved: " + backup};
+    layout::DB db(orig);
+    auto info = layout::analyze(db, g_layout_user);
+    layout::apply(db, info, req, log);
+    auto out = db.serialize();
+    with_ftp([&](ftp::Session &f) { f.put(layout::DB_PATH, out); return 0; });
+    log.push_back("Uploaded. Restart the PS5 to see the new home screen.");
+    return {{"ok", true}, {"log", log}, {"backup", backup}, {"layout", layout_state(out)}};
+}
+
+static json layout_backups() {
+    json out = json::array();
+    std::vector<fs::path> dirs;
+    for (auto &e : fs::directory_iterator(data_path("backups"))) if (e.is_directory()) dirs.push_back(e.path());
+    std::sort(dirs.rbegin(), dirs.rend());
+    for (auto &d : dirs) {
+        try { std::ifstream f(d / "backup.json"); json m; f >> m; out.push_back(m); } catch (...) {}
+    }
+    return {{"ok", true}, {"backups", out}};
+}
+
+static json layout_restore(const std::string &id) {
+    std::lock_guard<std::mutex> l(g_layout_mu);
+    if (id.empty() || id.find_first_of("/\\") != std::string::npos || id.find("..") != std::string::npos) throw ps5::Error("Unknown backup.");
+    auto db = read_local(data_path("backups") / fs::u8path(id) / "app.db");
+    if (db.empty()) throw ps5::Error("That backup is missing its database file.");
+    { layout::DB check(db); }   // throws if it isn't a healthy database
+    with_ftp([&](ftp::Session &f) { f.put(layout::DB_PATH, db); return 0; });
+    return {{"ok", true}, {"layout", layout_state(db)}};
+}
+
+static std::string preset_file(std::string name) {
+    std::string o;
+    for (char c : name) o += (isalnum((unsigned char)c) || c == ' ' || c == '-' || c == '_') ? c : '_';
+    while (!o.empty() && o.back() == ' ') o.pop_back();
+    if (o.empty()) throw ps5::Error("Give the preset a name.");
+    return o;
+}
+static json layout_presets() {
+    json names = json::array();
+    for (auto &e : fs::directory_iterator(data_path("presets")))
+        if (e.path().extension() == ".json") names.push_back(e.path().stem().u8string());
+    return {{"ok", true}, {"presets", names}};
+}
+
 // ─────────────────────────────── tiny HTTP server ─────────────────────
 struct Req { std::string method, path, query; std::map<std::string, std::string> q; std::vector<uint8_t> body; };
 
@@ -492,6 +663,35 @@ static void handle(sock_t s, Req &r) {
             auto id = j.value("title_id", ""), src = j.value("src", ""), kind = j.value("kind", "homebrew");
             respond_json(s, r.path == "/api/apply" ? do_apply(id, src, kind) : do_restore(id, src, kind)); return;
         }
+        if (r.path == "/api/layout/load" && r.method == "POST") {
+            json j = json::parse(std::string(r.body.begin(), r.body.end()));
+            respond_json(s, layout_load(j.value("user", ""))); return;
+        }
+        if (r.path == "/api/layout/img") {
+            auto b = tile_image(r.q["p"]);
+            if (b.empty()) { respond(s, 404, "text/plain", "none", 4); return; }
+            respond(s, 200, "image/png", b.data(), b.size()); return;
+        }
+        if (r.path == "/api/layout/apply" && r.method == "POST") { respond_json(s, layout_apply(json::parse(std::string(r.body.begin(), r.body.end())))); return; }
+        if (r.path == "/api/layout/backups") { respond_json(s, layout_backups()); return; }
+        if (r.path == "/api/layout/restore" && r.method == "POST") {
+            json j = json::parse(std::string(r.body.begin(), r.body.end()));
+            respond_json(s, layout_restore(j.value("id", ""))); return;
+        }
+        if (r.path == "/api/layout/presets") { respond_json(s, layout_presets()); return; }
+        if (r.path == "/api/layout/preset/save" && r.method == "POST") {
+            json j = json::parse(std::string(r.body.begin(), r.body.end()));
+            std::string name = preset_file(j.value("name", ""));
+            std::ofstream(data_path("presets") / fs::u8path(name + ".json")) << j.value("data", json::object()).dump(2);
+            respond_json(s, {{"ok", true}, {"name", name}}); return;
+        }
+        if (r.path == "/api/layout/preset/load" && r.method == "POST") {
+            json j = json::parse(std::string(r.body.begin(), r.body.end()));
+            std::ifstream f(data_path("presets") / fs::u8path(preset_file(j.value("name", "")) + ".json"));
+            if (!f) throw ps5::Error("Preset not found.");
+            json d; f >> d;
+            respond_json(s, {{"ok", true}, {"data", d}}); return;
+        }
         respond(s, 404, "text/plain", "not found", 9);
     } catch (std::exception &e) {
         respond_json(s, {{"ok", false}, {"error", e.what()}}, 200);
@@ -504,6 +704,7 @@ int main(int argc, char **argv) {
     char exe[MAX_PATH]; GetModuleFileNameA(nullptr, exe, MAX_PATH);
     std::string ep = exe; std::string exedir = ep.substr(0, ep.find_last_of("\\/") + 1);
     g_config_path = exedir + "psgfx.json"; g_legacy_config_path = exedir + "ps5-art-studio.json";
+    g_data_dir = exedir + "PSGFX Layout";
     // Close any other running copy (e.g. an older version still open in its console window),
     // so the browser can only ever talk to this one.
     {

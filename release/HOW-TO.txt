@@ -1,5 +1,5 @@
-PSGFX 1.0
-Custom icons and backgrounds for your PS5 homebrew and games.
+PSGFX 1.1
+Custom icons and backgrounds for your PS5 homebrew and games, and your home-screen layout.
 
 BEFORE YOU START
  - PS5 Upload's payload must be running on your PS5 (the same setup you use to upload homebrew).
@@ -18,6 +18,15 @@ STEPS
 
 UNDO
  - Select the app and click "Restore original art".
+
+HOME LAYOUT (new in 1.1)
+ 1. Connect, then click "Home layout" at the top.
+ 2. Select a tile: choose Games, Media or Hidden, or rename it.
+ 3. Drag games into order or use A-Z / Z-A. Tick "Lock order" to keep it.
+ 4. Click "Apply to PS5" (optionally save it as a preset), then restart the PS5.
+ - Backups and presets live in the "PSGFX Layout" folder next to PSGFX.exe.
+   Use "Backups" to undo, or Safe Mode > Rebuild Database as a last resort.
+ - After a firmware update, open "Presets", load your layout and apply it again.
 
 TIPS
  - Best results: icons 512x512 or larger, backgrounds 3840x2160.

@@ -6,7 +6,7 @@
   <a href="../../releases/latest"><b>Download PSGFX for Windows</b></a>
 </p>
 
-PSGFX gives your PS5 homebrew and games new home-screen art. Pick an app, drop in any image, and click **Apply**. PSGFX resizes and converts it to the exact format the console expects, uploads it to the right folder, and keeps a backup of the original so you can undo it with one click.
+PSGFX gives your PS5 homebrew and games new home-screen art, and lets you arrange the home screen itself: hide tiles like the PlayStation Store, rename anything, move apps between Games and Media, and lock your games in the order you want. Pick an app, drop in any image, and click **Apply**. PSGFX resizes and converts it to the exact format the console expects, uploads it to the right folder, and keeps a backup of the original so you can undo it with one click.
 
 It works through [PS5 Upload](https://github.com/phantomptr/ps5upload)'s payload, which is already running on your console. There's nothing to install on the PS5 or on your PC: PSGFX is a single `.exe`.
 
@@ -20,6 +20,10 @@ It works through [PS5 Upload](https://github.com/phantomptr/ps5upload)'s payload
 - **Live preview.** A replica of the PS5 home screen shows your art before anything touches the console. Drop an image on the tile to set the icon, or anywhere else to set the background.
 - **One-click restore.** The first time you change something, PSGFX saves the original next to it. **Restore original art** puts it back exactly.
 - **Clean list.** System apps and leftovers are tucked away under *Show other items*.
+- **Home layout (new in 1.1).** Hide any tile (PlayStation Store, Game Library, PS Plus, media apps), rename games and apps, move apps between the Games and Media tabs, and reorder your games by dragging or with A–Z / Z–A.
+- **Lock order.** Keeps your arrangement in place even after you play other games.
+- **Layout presets.** Save a layout when you apply it and re-apply it in one click after a firmware update or database rebuild resets the home screen.
+- **Home-screen backups.** PSGFX saves the home-screen database before every layout change, plus a copy of the very first one it read. Restore any of them from the Backups dialog.
 - **No setup.** A single portable Windows app that opens in your browser. It remembers your PS5's IP address.
 
 ## Requirements
@@ -38,6 +42,15 @@ It works through [PS5 Upload](https://github.com/phantomptr/ps5upload)'s payload
 
 To undo, select the app and click **Restore original art**.
 
+### Home layout
+
+1. Connect, then click **Home layout** at the top.
+2. Pick a tile in the strip under the preview. Choose **Games**, **Media** or **Hidden**, or type a new name.
+3. Drag games into any order, or use **A–Z** / **Z–A**. Tick **Lock order** to keep it that way after you play other games.
+4. Click **Apply to PS5**, optionally saving the layout as a preset, then restart the PS5.
+
+PSGFX edits the console's home-screen database (`/system_data/priv/mms/app.db`) through PS5 Upload's built-in FTP server, which it starts for you. Backups and presets are kept in the **PSGFX Layout** folder next to `PSGFX.exe`. If the home screen ever looks wrong, restore a backup, or use Safe Mode → **Rebuild Database**. App Library always comes back on its own; the system adds it regardless of the database.
+
 ![Homebrew app with its current background](docs/screenshot-homebrew.png)
 
 ## Tips
@@ -51,7 +64,7 @@ To undo, select the app and click **Restore original art**.
 
 ## Build from source
 
-PSGFX is plain C++17 with no external dependencies. Everything it needs is in `src/lib`.
+PSGFX is plain C++17 with no external dependencies. Everything it needs is in `src/lib` (including the SQLite amalgamation used for Home layout).
 
 ```bash
 # Linux / WSL: produces build/PSGFX.exe

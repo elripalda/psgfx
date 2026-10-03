@@ -7,6 +7,7 @@ import base64, json, os, shutil, socket, struct, sys, threading
 ROOT = sys.argv[1]; MPORT = int(sys.argv[2]); XPORT = int(sys.argv[3])
 ALLOWED = ("/data/", "/user/", "/mnt/")
 txs = {}
+ftp_started = []
 
 def P(p): return os.path.join(ROOT, p.lstrip("/"))
 def allowed(p): return p.startswith(ALLOWED) and ".." not in p
@@ -30,6 +31,20 @@ def handle(s, t, body):
     if body[:1] == b"{":
         try: j = json.loads(body)
         except Exception: pass
+    if t == 224:  # FTP_START - the payload's built-in FTP server (needs: pip install pyftpdlib)
+        port = int(j.get("port") or 2122)
+        if not ftp_started:
+            from pyftpdlib.authorizers import DummyAuthorizer
+            from pyftpdlib.handlers import FTPHandler
+            from pyftpdlib.servers import FTPServer
+            import logging; logging.disable(logging.CRITICAL)
+            auth = DummyAuthorizer(); auth.add_anonymous(ROOT, perm="elradfmwM")
+            h = FTPHandler; h.authorizer = auth
+            srv = FTPServer(("127.0.0.1", port), h)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            ftp_started.append(port)
+            return send(s, 225, json.dumps({"ok": True, "port": port, "root": "/"}))
+        return send(s, 225, json.dumps({"ok": False, "error": "already_running", "port": ftp_started[0]}))
     if t == 62:  # APP_LIST_REGISTERED
         apps = []
         base = P("/user/app")

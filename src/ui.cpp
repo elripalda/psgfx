@@ -94,6 +94,79 @@ main{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:
 .log.ok{border-color:rgba(61,220,151,.4)} .log.bad{border-color:rgba(255,107,107,.5);color:#ffd0d0}
 .welcome{max-width:560px;color:var(--muted)}
 .welcome h1{color:var(--text);font-size:26px;letter-spacing:-.02em;margin:0 0 8px}
+/* ── header views ── */
+.views{display:flex;gap:4px;margin-left:8px;padding:3px;border-radius:999px;background:var(--glass);border:1px solid var(--line)}
+.views button{border:0;background:none;padding:6px 14px;border-radius:999px;color:var(--muted);cursor:pointer;font-weight:600;font-size:13px}
+.views button[aria-pressed="true"]{background:var(--glass-hi);color:var(--text)}
+
+/* ── home layout ── */
+.lv{display:grid;grid-template-columns:1fr 320px;min-height:calc(100vh - 66px)}
+.lv-main{padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.lv-empty{max-width:560px;color:var(--muted)}
+.lv-empty h1{color:var(--text);font-size:26px;letter-spacing:-.02em;margin:0 0 8px}
+.lstage{position:relative;aspect-ratio:16/9;width:min(100%,calc((100vh - 470px)*16/9));min-width:min(100%,520px);margin:0 auto;border-radius:var(--r-lg);overflow:hidden;background:linear-gradient(135deg,#101b33,#060913);border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.lstage .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ltabs{position:absolute;left:4.5%;top:4%;display:flex;gap:clamp(14px,2.4vw,30px);font-size:clamp(11px,1.4vw,17px);color:rgba(255,255,255,.65)}
+.ltabs span{padding-bottom:3px;border-bottom:2px solid transparent;cursor:pointer}
+.ltabs span.on{color:#fff;border-color:#fff}
+.lrow{position:absolute;left:4.5%;right:0;top:14%;display:flex;gap:.9%;align-items:flex-start;overflow:hidden}
+.ltile{flex:none;width:6.2%;aspect-ratio:1;border-radius:8%;background:rgba(255,255,255,.12) center/cover;cursor:pointer;position:relative}
+.ltile.sel{width:12.5%;border-radius:7%;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 8px 30px rgba(0,0,0,.5)}
+.ltile i,.lcard .im i{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-weight:600;font-size:clamp(8px,1vw,14px);color:rgba(255,255,255,.8)}
+.ltitle{position:absolute;left:4.5%;top:42%;font-size:clamp(14px,2.2vw,30px);font-weight:600;text-shadow:0 2px 12px rgba(0,0,0,.6);max-width:60%}
+.lsub{position:absolute;left:4.5%;top:calc(42% + clamp(20px,3vw,40px));font-size:clamp(10px,1vw,13px);color:rgba(255,255,255,.7)}
+.lbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;width:min(100%,calc((100vh - 470px)*16/9));min-width:min(100%,520px);margin:0 auto}
+.ltab{border:0;background:none;padding:7px 12px;border-radius:var(--r-sm);color:var(--muted);cursor:pointer;font-weight:600}
+.ltab[aria-pressed="true"]{background:var(--glass-hi);color:var(--text)}
+.ltab small{font-weight:400;color:var(--muted);margin-left:4px}
+.lsorts{margin-left:auto;display:flex;align-items:center;gap:2px}
+.lsorts .btn{padding:5px 10px;font-size:12px}
+.lsorts label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-left:8px;cursor:pointer}
+.lstrip{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 16px;width:min(100%,calc((100vh - 470px)*16/9));min-width:min(100%,520px);margin:0 auto}
+.lgrp{display:flex;flex-direction:column;gap:8px;flex:none}
+.lgrp + .lgrp{padding-left:16px;border-left:1px solid var(--line)}
+.lgrp>span{font-size:12px;color:var(--muted)}
+.lcards{display:flex;gap:10px}
+.lcard{flex:none;width:112px;padding:7px;border-radius:var(--r-md);border:1px solid transparent;background:var(--glass);cursor:pointer;position:relative;text-align:left}
+.lcard:hover{background:var(--glass-hi)}
+.lcard[aria-current="true"]{border-color:var(--blue-hi);background:var(--glass-hi)}
+.lcard.drag{opacity:.35}
+.lcard.over{box-shadow:-5px 0 0 -2px var(--blue-hi)}
+.lcard .im{aspect-ratio:1;border-radius:9px;background:var(--bg2) center/cover;position:relative}
+.lcard .nm{margin-top:6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lcard .bd{position:absolute;top:12px;right:12px;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:999px;background:var(--warn);color:#2a1800}
+.lempty{color:var(--muted);padding:20px;border:1px dashed var(--line);border-radius:var(--r-md);flex:1;text-align:center}
+.lwarn{width:min(100%,calc((100vh - 470px)*16/9));margin:0 auto;padding:10px 14px;border-radius:var(--r-md);background:rgba(255,181,71,.08);border:1px solid rgba(255,181,71,.3);color:#ffd9a0;font-size:13px}
+.lside{border-left:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:18px}
+.lside h2{font-size:18px;margin:0;letter-spacing:-.01em}
+.lside .id{font-size:12px;color:var(--muted)}
+.lsec{display:grid;gap:8px}
+.lsec>label,.lsec>.lbl{font-size:12.5px;color:var(--muted)}
+.lseg{display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border-radius:var(--r-sm);background:var(--glass);border:1px solid var(--line)}
+.lseg button{border:0;background:none;padding:7px 0;border-radius:6px;color:var(--muted);cursor:pointer}
+.lseg button[aria-pressed="true"]{background:var(--glass-hi);color:var(--text)}
+.ltxt{width:100%;padding:9px 11px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--glass)}
+.lnote{font-size:12px;color:var(--muted)}
+.linker{border:0;background:none;color:var(--blue-hi);padding:0;cursor:pointer;justify-self:start;font-size:13px}
+.lfoot{position:sticky;bottom:0;display:flex;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid var(--line);background:rgba(6,9,19,.92);backdrop-filter:blur(8px);grid-column:1/-1}
+.lfoot .pend{color:var(--muted);display:flex;align-items:center;gap:8px}
+.lfoot .pend b{width:8px;height:8px;border-radius:50%;background:#4a5570}
+.lfoot .pend.has{color:var(--text)} .lfoot .pend.has b{background:var(--warn)}
+.lfoot .sp{flex:1}
+.scrim{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,10,.7);z-index:20}
+.scrim.open{display:grid}
+.dlg{width:min(560px,92vw);max-height:84vh;overflow:auto;background:#0c1426;border:1px solid var(--line);border-radius:var(--r-lg);padding:22px}
+.dlg h3{margin:0 0 6px;font-size:18px}
+.dlg p{margin:0 0 12px;color:var(--muted)}
+.dlg .li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-sm);background:var(--glass);border:1px solid var(--line);margin-bottom:6px}
+.dlg .li div{flex:1;min-width:0}
+.dlg .li small{display:block;color:var(--muted)}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dlg pre{white-space:pre-wrap;font-size:12px;background:var(--glass);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;color:var(--muted);max-height:240px;overflow:auto}
+.dlg .chk{display:flex;align-items:center;gap:8px;margin:14px 0 8px;cursor:pointer}
+.busyv{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,10,.55);z-index:30;color:var(--muted)}
+.busyv.open{display:grid}
+@media (max-width:900px){.lv{grid-template-columns:1fr}.lside{border-left:0;border-top:1px solid var(--line)}}
 .hidden{display:none!important}
 @media (max-width:900px){.layout{grid-template-columns:1fr}.rail{max-height:none;position:static;border-bottom:1px solid var(--line)}main{border-left:0}.slots{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -101,7 +174,8 @@ main{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:
 </head>
 <body>
 <header class="top">
-  <div class="brand"><img src="/wordmark.png" alt="PSGFX"><span>1.0</span></div>
+  <div class="brand"><img src="/wordmark.png" alt="PSGFX"><span>1.1</span></div>
+  <nav class="views" aria-label="View"><button data-v="art" aria-pressed="true">Art</button><button data-v="layout" aria-pressed="false">Home layout</button></nav>
   <form class="connect" id="cf">
     <span class="dot" id="dot" aria-hidden="true"></span>
     <label for="ip">PS5 IP</label>
@@ -151,6 +225,49 @@ main{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:
     </section>
   </main>
 </div>
+<section class="lv hidden" id="lv" aria-label="Home layout">
+  <div class="lv-main">
+    <div class="lv-empty" id="lvEmpty">
+      <h1>Arrange your home screen.</h1>
+      <p>Hide tiles like the PlayStation Store, move apps between Games and Media, rename anything, and put your games in any order. Connect to your PS5 above to start. PSGFX backs up the home screen before every change.</p>
+    </div>
+    <div id="lvBody" class="hidden" style="display:contents">
+      <div id="lvWarn"></div>
+      <div class="lstage" id="lstage">
+        <img class="bgimg hidden" id="lbg" alt="">
+        <div class="shade" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.45) 0%,transparent 30%,transparent 55%,rgba(0,0,0,.7) 100%)"></div>
+        <div class="ltabs"><span data-w="games">Games</span><span data-w="media">Media</span></div>
+        <div class="lrow" id="lrow"></div>
+        <div class="ltitle" id="ltitle"></div>
+        <div class="lsub" id="lsub"></div>
+      </div>
+      <div class="lbar">
+        <button class="ltab" data-w="games">Games<small id="lcG"></small></button>
+        <button class="ltab" data-w="media">Media<small id="lcM"></small></button>
+        <button class="ltab" data-w="hidden">Hidden<small id="lcH"></small></button>
+        <div class="lsorts" id="lsorts">
+          <button class="btn" data-sort="az" title="Sort A to Z">A–Z</button>
+          <button class="btn" data-sort="za" title="Sort Z to A">Z–A</button>
+          <button class="btn" data-sort="recent" title="Back to recently played order">Recent</button>
+          <label title="Keeps this order even after you play other games"><input type="checkbox" id="llock"> Lock order</label>
+        </div>
+      </div>
+      <div class="lstrip" id="lstrip"></div>
+    </div>
+  </div>
+  <aside class="lside" id="lside"><p class="lnote">Select a tile to change it.</p></aside>
+  <footer class="lfoot">
+    <div class="pend" id="lpend"><b></b><span>No changes</span></div>
+    <span class="sp"></span>
+    <button class="btn" id="lPresets">Presets</button>
+    <button class="btn" id="lBackups">Backups</button>
+    <button class="btn" id="lReload">Reload</button>
+    <button class="btn" id="lDiscard" disabled>Discard</button>
+    <button class="btn primary" id="lApply" disabled>Apply to PS5</button>
+  </footer>
+</section>
+<div class="scrim" id="dlg"><div class="dlg" id="dlgBody"></div></div>
+<div class="busyv" id="busyv"><span id="busyT">Working…</span></div>
 <input type="file" id="file" accept="image/png,image/jpeg" hidden>
 
 <script>
@@ -174,6 +291,7 @@ $('#cf').addEventListener('submit', async e => {
   try {
     const j = await api('/api/connect', {method:'POST', body: JSON.stringify({ip})});
     st.apps = j.apps; setDot('ok'); renderApps();
+    L.loaded = false; if (!$('#lv').classList.contains('hidden')) lload();
   } catch (err) {
     setDot(''); $('#apps').innerHTML = ''; const p=document.createElement('p'); p.className='empty'; p.textContent = err.message; $('#apps').appendChild(p);
   } finally { $('#cbtn').disabled = false; }
@@ -303,6 +421,249 @@ $('#restore').onclick = async () => {
   } catch (err) { showLog([err.message], 'bad'); }
 };
 function refreshRailIcon(a){ const im = document.querySelector('.app[aria-current="true"] .ic'); if (im) { im.classList.remove('none'); im.src = '/api/icon/'+encodeURIComponent(a.title_id)+'?t='+Date.now(); } }
+
+// ─────────────────────────── Home layout ───────────────────────────
+const L = { info:null, edits:{}, order:[], base:[], dragged:false, w:'games', sel:null, focus:0, loaded:false, lastPreset:'' };
+const LIB = 'NPXS40071';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const limg = p => p ? '/api/layout/img?p=' + encodeURIComponent(p) : '';
+const ltiles = () => L.info?.tiles ?? [];
+const lbyId = id => ltiles().find(t => t.id === id);
+function leff(t){
+  const e = L.edits[t.id] || {};
+  return {...t, where: e.where ?? t.where, name: e.name ?? t.name, changed: !!L.edits[t.id]};
+}
+function lchanges(){ return Object.keys(L.edits).length + (L.dragged ? 1 : 0); }
+function lgroups(w){
+  const all = ltiles().map(leff);
+  if (w === 'hidden') return [{key:'hidden', label:'Hidden from the home screen', list: all.filter(t => t.where === 'hidden')}];
+  const sys = all.filter(t => t.kind === 'system' && t.where === w).sort((a,b) => (b.home - a.home) || (a.homeIdx - b.homeIdx) || (b.access - a.access));
+  return [{key:'system', label:'System', list: sys},
+          {key:'mine', label: w === 'games' ? 'Games' : 'Apps', list: L.order.map(id => leff(lbyId(id))).filter(t => t.where === w)}];
+}
+function lrowFor(w){
+  const [sys, mine] = lgroups(w).map(g => g.list);
+  if (w === 'media') return [...mine, ...sys];
+  const lib = sys.filter(t => t.id === LIB), lead = sys.filter(t => t.home && t.id !== LIB), rest = sys.filter(t => !t.home && t.id !== LIB);
+  return [...lead, ...mine, ...lib, ...rest];
+}
+const initials = n => esc(String(n).replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean).slice(0,2).map(x => x[0]).join('').toUpperCase());
+function setImg(el, src, name){
+  el.innerHTML = `<i>${initials(name)}</i>`;
+  if (!src) return;
+  const im = new Image(); im.onload = () => { el.style.backgroundImage = `url('${src}')`; el.innerHTML = ''; }; im.src = src;
+}
+
+function lrender(){
+  const has = !!L.info;
+  $('#lvEmpty').classList.toggle('hidden', has); $('#lvBody').classList.toggle('hidden', !has);
+  lfooter();
+  if (!has) { $('#lside').innerHTML = '<p class="lnote">Select a tile to change it.</p>'; return; }
+  $('#lvWarn').innerHTML = (L.info.warnings || []).map(w => `<div class="lwarn">${esc(w)}</div>`).join('');
+  document.querySelectorAll('.ltab').forEach(b => b.setAttribute('aria-pressed', b.dataset.w === L.w));
+  $('#lcG').textContent = lgroups('games').reduce((n,g) => n + g.list.length, 0);
+  $('#lcM').textContent = lgroups('media').reduce((n,g) => n + g.list.length, 0);
+  $('#lcH').textContent = lgroups('hidden')[0].list.length;
+  $('#lsorts').classList.toggle('hidden', !L.info.canOrder || L.w === 'hidden');
+  // strip
+  const gs = lgroups(L.w);
+  const strip = $('#lstrip');
+  if (!gs.some(g => g.list.length)) strip.innerHTML = `<div class="lempty">${L.w === 'hidden' ? 'Nothing is hidden. Select a tile and choose Hidden to take it off the home screen.' : 'No tiles here.'}</div>`;
+  else {
+    strip.innerHTML = gs.filter(g => g.list.length).map(g => `<div class="lgrp"><span>${g.label}</span><div class="lcards">${g.list.map(t =>
+      `<button class="lcard" data-id="${t.id}" data-g="${g.key}" draggable="${g.key === 'mine' && L.info.canOrder}" ${t.id === L.sel ? 'aria-current="true"' : ''}>
+        <div class="im" data-src="${esc(limg(t.icon))}" data-n="${esc(t.name)}"></div>${t.changed ? '<span class="bd">Edited</span>' : ''}
+        <div class="nm" title="${esc(t.name)}">${esc(t.name)}</div></button>`).join('')}</div></div>`).join('');
+    strip.querySelectorAll('.im').forEach(el => setImg(el, el.dataset.src, el.dataset.n));
+    strip.querySelector('[aria-current="true"]')?.scrollIntoView({block:'nearest', inline:'nearest'});
+  }
+  // preview
+  const pw = L.w === 'hidden' ? 'games' : L.w;
+  document.querySelectorAll('.ltabs span').forEach(s => s.classList.toggle('on', s.dataset.w === pw));
+  const row = lrowFor(pw);
+  if (L.sel) { const i = row.findIndex(t => t.id === L.sel); if (i >= 0) L.focus = i; }
+  L.focus = Math.max(0, Math.min(L.focus, row.length - 1));
+  $('#lrow').innerHTML = row.slice(0, 16).map((t,i) => `<div class="ltile ${i === L.focus ? 'sel' : ''}" data-id="${t.id}" data-src="${esc(limg(t.icon))}" data-n="${esc(t.name)}"></div>`).join('');
+  $('#lrow').querySelectorAll('.ltile').forEach(el => setImg(el, el.dataset.src, el.dataset.n));
+  const f = row[L.focus];
+  $('#ltitle').textContent = f ? f.name : 'Nothing on this tab';
+  $('#lsub').textContent = f && f.kind === 'system' ? 'System' : '';
+  const bg = $('#lbg');
+  if (f && f.bg) { bg.onload = () => bg.classList.remove('hidden'); bg.onerror = () => bg.classList.add('hidden'); bg.src = limg(f.bg); }
+  else bg.classList.add('hidden');
+  lside();
+}
+
+function lside(){
+  const box = $('#lside'), t0 = L.sel && lbyId(L.sel);
+  if (!t0) { box.innerHTML = '<p class="lnote">Select a tile to change it.</p>'; return; }
+  const t = leff(t0), e = L.edits[t.id] || {};
+  const art = st.apps.find(a => a.title_id === t.id && a.editable);
+  box.innerHTML = `<div><h2>${esc(t.name)}</h2><div class="id">${esc(t.id)}${t.kind === 'system' ? ' · system tile' : ''}</div></div>
+    <div class="lsec"><span class="lbl">Shows on</span><div class="lseg">${['games','media','hidden'].map(v =>
+      `<button data-where="${v}" aria-pressed="${t.where === v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div></div>
+    <div class="lsec"><label for="lname">Name on the home screen</label><input class="ltxt" id="lname" value="${esc(t.name)}" maxlength="80">
+      ${e.name != null ? '<button class="linker" id="lname0">Use original name</button>' : ''}</div>
+    ${art ? '<div class="lsec"><span class="lbl">Icon and background</span><button class="btn" id="lart">Edit art</button></div>' : ''}
+    ${t.changed ? '<button class="linker" id="lundo" style="color:var(--bad)">Undo changes to this tile</button>' : ''}`;
+}
+
+function lfooter(){
+  const n = lchanges(), p = $('#lpend');
+  p.classList.toggle('has', n > 0);
+  p.querySelector('span').textContent = n ? `${n} unsaved change${n > 1 ? 's' : ''}` : 'No changes';
+  $('#lApply').disabled = !n || !L.info; $('#lDiscard').disabled = !n;
+  ['#lPresets','#lReload'].forEach(s => $(s).disabled = !L.info);
+}
+
+function lsetEdit(id, key, val){
+  const t = lbyId(id), e = L.edits[id] ||= {};
+  if (val === t[key] || val === '' || val == null) delete e[key]; else e[key] = val;
+  if (!Object.keys(e).length) delete L.edits[id];
+  lrender();
+}
+function lreset(){
+  L.order = ltiles().filter(t => t.kind !== 'system').sort((a,b) => b.access - a.access).map(t => t.id);
+  L.base = [...L.order]; L.edits = {}; L.dragged = false; $('#llock').checked = false;
+}
+
+function busyv(on, t){ $('#busyv').classList.toggle('open', on); if (t) $('#busyT').textContent = t; }
+function dlg(html){ $('#dlgBody').innerHTML = html; $('#dlg').classList.add('open'); }
+function dlgClose(){ $('#dlg').classList.remove('open'); }
+$('#dlg').addEventListener('click', e => { if (e.target.id === 'dlg' || e.target.closest('[data-close]')) dlgClose(); });
+
+async function lload(){
+  busyv(true, 'Reading your home screen…');
+  try { L.info = await api('/api/layout/load', {method:'POST', body: JSON.stringify({})}); lreset(); L.loaded = true; }
+  catch (err) { L.info = null; $('#lvEmpty').innerHTML = `<h1>Couldn't read the home screen</h1><p>${esc(err.message)}</p>`; }
+  busyv(false); lrender();
+}
+
+// views
+function setView(v){
+  document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
+  document.querySelector('.layout').classList.toggle('hidden', v !== 'art');
+  $('#lv').classList.toggle('hidden', v !== 'layout');
+  if (v === 'layout' && !L.loaded && $('#dot').classList.contains('ok')) lload();
+  lrender();
+}
+document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.v));
+
+// interactions
+document.querySelectorAll('.ltab').forEach(b => b.onclick = () => { L.w = b.dataset.w; L.focus = 0; lrender(); });
+document.querySelectorAll('.ltabs span').forEach(s => s.onclick = () => { L.w = s.dataset.w; L.focus = 0; L.sel = null; lrender(); });
+$('#lstrip').addEventListener('click', e => { const c = e.target.closest('.lcard'); if (c) { L.sel = c.dataset.id; lrender(); } });
+$('#lrow').addEventListener('click', e => { const c = e.target.closest('.ltile'); if (c) { L.sel = c.dataset.id; lrender(); } });
+document.addEventListener('keydown', e => {
+  if ($('#lv').classList.contains('hidden') || !L.info || /INPUT|TEXTAREA/.test(document.activeElement.tagName) || $('#dlg').classList.contains('open')) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const row = lrowFor(L.w === 'hidden' ? 'games' : L.w); if (!row.length) return;
+  L.focus = Math.max(0, Math.min(row.length - 1, L.focus + (e.key === 'ArrowRight' ? 1 : -1)));
+  L.sel = row[L.focus].id; lrender(); e.preventDefault();
+});
+$('#lside').addEventListener('click', e => {
+  const id = L.sel; if (!id) return;
+  const w = e.target.closest('[data-where]'); if (w) return lsetEdit(id, 'where', w.dataset.where);
+  if (e.target.closest('#lname0')) return lsetEdit(id, 'name', null);
+  if (e.target.closest('#lundo')) { delete L.edits[id]; return lrender(); }
+  if (e.target.closest('#lart')) {
+    setView('art');
+    const btn = [...document.querySelectorAll('.app')].find(b => b.querySelector('.i').textContent.startsWith(id));
+    const a = st.apps.find(x => x.title_id === id);
+    if (a && a.hidden && !st.showHidden) { st.showHidden = true; renderApps(); }
+    const b2 = [...document.querySelectorAll('.app')].find(b => b.querySelector('.i').textContent.startsWith(id)) || btn;
+    if (a && b2) select(a, b2);
+  }
+});
+$('#lside').addEventListener('change', e => { if (e.target.id === 'lname') lsetEdit(L.sel, 'name', e.target.value.trim()); });
+$('#lside').addEventListener('keydown', e => { if (e.target.id === 'lname' && e.key === 'Enter') e.target.blur(); });
+
+let ldrag = null;
+$('#lstrip').addEventListener('dragstart', e => { const c = e.target.closest('.lcard'); if (!c || c.dataset.g !== 'mine') return; ldrag = c.dataset.id; c.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); });
+$('#lstrip').addEventListener('dragend', () => { ldrag = null; document.querySelectorAll('.lcard').forEach(c => c.classList.remove('drag','over')); });
+$('#lstrip').addEventListener('dragover', e => { const c = e.target.closest('.lcard'); if (!ldrag || !c || c.dataset.g !== 'mine') return; e.preventDefault(); document.querySelectorAll('.lcard.over').forEach(x => x.classList.remove('over')); c.classList.add('over'); });
+$('#lstrip').addEventListener('drop', e => {
+  e.preventDefault(); const c = e.target.closest('.lcard'); if (!ldrag || !c || c.dataset.g !== 'mine' || c.dataset.id === ldrag) return;
+  L.order.splice(L.order.indexOf(ldrag), 1); L.order.splice(L.order.indexOf(c.dataset.id), 0, ldrag);
+  L.dragged = true; L.sel = ldrag; lrender();
+});
+document.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => {
+  const k = b.dataset.sort;
+  if (k === 'recent') { L.order = [...L.base]; L.dragged = false; return lrender(); }
+  const key = id => leff(lbyId(id)).name.replace(/^[^\p{L}\p{N}]+/u, '').toLocaleLowerCase();
+  L.order.sort((a,b) => key(a).localeCompare(key(b)) * (k === 'za' ? -1 : 1));
+  L.dragged = true; lrender();
+});
+$('#lDiscard').onclick = () => { lreset(); lrender(); };
+$('#lReload').onclick = () => { if (lchanges() && !confirm('Reloading discards your unsaved changes. Continue?')) return; lload(); };
+
+const presetData = () => ({edits: L.edits, order: L.order, dragged: L.dragged, lock: $('#llock').checked});
+function describe(e){
+  const p = [];
+  if (e.where) p.push(e.where === 'hidden' ? 'hide' : 'show on ' + e.where);
+  if (e.name != null) p.push(`rename to “${e.name}”`);
+  return p.join(', ');
+}
+$('#lApply').onclick = () => {
+  const lines = Object.entries(L.edits).map(([id, e]) => `<div class="li"><div>${esc(lbyId(id).name)}<small>${esc(describe(e))}</small></div></div>`);
+  if (L.dragged) lines.push(`<div class="li"><div>${$('#llock').checked ? 'Locked order' : 'New order'}<small>${esc(L.order.slice(0,6).map(id => leff(lbyId(id)).name).join(' → '))}${L.order.length > 6 ? ' …' : ''}</small></div></div>`);
+  dlg(`<h3>Apply ${lchanges()} change${lchanges() > 1 ? 's' : ''} to your PS5?</h3>
+    <p>PSGFX saves a backup of your current home screen first. Restart the PS5 afterwards to see the result.</p>
+    ${lines.join('')}
+    <label class="chk"><input type="checkbox" id="dSave" checked> Also save this layout as a preset</label>
+    <input class="ltxt" id="dName" value="${esc(L.lastPreset || 'My layout')}" maxlength="60" aria-label="Preset name">
+    <p class="lnote" style="margin-top:6px">Re-apply it in one click after a firmware update or database rebuild resets your home screen.</p>
+    <div class="acts"><button class="btn" data-close>Cancel</button><button class="btn primary" id="dGo">Apply changes</button></div>`);
+  $('#dSave').onchange = e => $('#dName').disabled = !e.target.checked;
+  $('#dGo').onclick = async () => {
+    if ($('#dSave').checked) {
+      const name = $('#dName').value.trim() || 'My layout';
+      try { await api('/api/layout/preset/save', {method:'POST', body: JSON.stringify({name, data: presetData()})}); L.lastPreset = name; }
+      catch (err) { if (!confirm(`Couldn't save the preset (${err.message}). Apply anyway?`)) return; }
+    }
+    dlgClose(); busyv(true, 'Backing up and applying…');
+    const edits = {};
+    for (const [id, e] of Object.entries(L.edits)) edits[id] = e;
+    try {
+      const j = await api('/api/layout/apply', {method:'POST', body: JSON.stringify({edits, recent: L.order, recentChanged: L.dragged, lock: $('#llock').checked})});
+      L.info = j.layout; lreset(); lrender();
+      dlg(`<h3>Changes applied</h3><p>Restart your PS5 to see the new home screen. If anything looks wrong, restore backup ${esc(j.backup)} from Backups.</p><pre>${esc(j.log.join('\n'))}</pre><div class="acts"><button class="btn primary" data-close>Done</button></div>`);
+    } catch (err) {
+      dlg(`<h3>Changes weren't applied</h3><p>${esc(err.message)}</p><div class="acts"><button class="btn primary" data-close>OK</button></div>`);
+    }
+    busyv(false);
+  };
+};
+$('#lBackups').onclick = async () => {
+  const j = await api('/api/layout/backups');
+  dlg(`<h3>Home screen backups</h3><p>Saved in the "PSGFX Layout" folder next to PSGFX.exe, before every change, plus one of the very first home screen PSGFX read.</p>
+    ${j.backups.length ? j.backups.map(b => `<div class="li"><div>${esc(b.label)}<small>${esc(b.created)} · ${esc(b.ps5)}</small></div><button class="btn" data-restore="${esc(b.id)}" ${$('#dot').classList.contains('ok') ? '' : 'disabled'}>Restore</button></div>`).join('') : '<p class="lnote">No backups yet. One is made the first time you open Home layout.</p>'}
+    <div class="acts"><button class="btn primary" data-close>Close</button></div>`);
+  document.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
+    if (!confirm('Upload this backup to your PS5? Your current home screen is replaced by it.')) return;
+    dlgClose(); busyv(true, 'Restoring backup…');
+    try { const r = await api('/api/layout/restore', {method:'POST', body: JSON.stringify({id: b.dataset.restore})}); L.info = r.layout; lreset(); lrender();
+      dlg('<h3>Backup restored</h3><p>Restart your PS5 to load it.</p><div class="acts"><button class="btn primary" data-close>Done</button></div>'); }
+    catch (err) { alert(err.message); }
+    busyv(false);
+  });
+};
+$('#lPresets').onclick = async () => {
+  const j = await api('/api/layout/presets');
+  dlg(`<h3>Layout presets</h3><p>Load one, check the preview, then Apply to PS5.</p>
+    ${j.presets.length ? j.presets.map(n => `<div class="li"><div>${esc(n)}</div><button class="btn" data-load="${esc(n)}">Load</button></div>`).join('') : '<p class="lnote">No presets yet. Tick "Also save this layout as a preset" when you apply.</p>'}
+    <div class="acts"><button class="btn primary" data-close>Close</button></div>`);
+  document.querySelectorAll('[data-load]').forEach(b => b.onclick = async () => {
+    const p = (await api('/api/layout/preset/load', {method:'POST', body: JSON.stringify({name: b.dataset.load})})).data;
+    lreset(); let n = 0;
+    for (const [id, e] of Object.entries(p.edits || {})) if (lbyId(id)) { L.edits[id] = {...e}; n++; }
+    if (p.dragged && p.order) { const known = p.order.filter(id => L.order.includes(id)); L.order = [...known, ...L.order.filter(id => !known.includes(id))]; L.dragged = true; }
+    $('#llock').checked = !!p.lock; L.lastPreset = b.dataset.load;
+    dlgClose(); lrender();
+    dlg(`<h3>Preset loaded</h3><p>${n} tile${n === 1 ? '' : 's'} matched this console${p.dragged ? ', plus your order' : ''}. Check the preview, then Apply to PS5.</p><div class="acts"><button class="btn primary" data-close>OK</button></div>`);
+  });
+};
+window.addEventListener('beforeunload', e => { if (lchanges()) { e.preventDefault(); e.returnValue = ''; } });
 
 api('/api/config').then(j => { if (j.ip) { $('#ip').value = j.ip; $('#cf').requestSubmit(); } });
 </script>
