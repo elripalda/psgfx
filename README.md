@@ -18,6 +18,7 @@ It works through [PS5 Upload](https://github.com/phantomptr/ps5upload)'s payload
 - **Custom backgrounds.** Any 16:9 image becomes the backdrop behind the app on the home screen. Homebrew gets full 4K backgrounds.
 - **Homebrew and installed games.** Homebrew apps registered with PS5 Upload show up with their icons, and so do your installed PS4 and PS5 games, with their real names.
 - **Live preview.** A replica of the PS5 home screen shows your art before anything touches the console. Drop an image on the tile to set the icon, or anywhere else to set the background.
+- **Rename from the Art view.** Change a homebrew app's or game's home-screen name right next to its art. For homebrew, PSGFX also updates the name in the app's `param.json` so changing its art later keeps the new name.
 - **One-click restore.** The first time you change something, PSGFX saves the original next to it. **Restore original art** puts it back exactly.
 - **Clean list.** System apps and leftovers are tucked away under *Show other items*.
 - **Home layout (new in 1.1).** Hide any tile (PlayStation Store, Game Library, PS Plus, media apps), rename games and apps, move apps between the Games and Media tabs, and reorder your games by dragging or with A–Z / Z–A.
@@ -79,7 +80,7 @@ On Windows, run `./build.sh` from an [MSYS2](https://www.msys2.org/) MinGW shell
 
 ### How it works
 
-PSGFX runs a small local web server (127.0.0.1 only) and opens your browser to it. It talks to PS5 Upload's payload over its FTX2 protocol on ports 9113 and 9114. It uses the payload's existing commands to list apps, read files, upload them (BLAKE3-verified), copy, and back up. Homebrew art is written to the app's `sce_sys` folder and to the home-screen metadata folder. Game art is written to `/user/appmeta/<title id>` in the same size and format as the original files. Backgrounds are encoded as BC7 DDS where the console uses DDS.
+PSGFX runs a small local web server (127.0.0.1 only) and opens your browser to it. It talks to PS5 Upload's payload over its FTX2 protocol on ports 9113 and 9114. It uses the payload's existing commands to list apps, read files, upload them (BLAKE3-verified), copy, and back up. Homebrew art is written to the app's `sce_sys` folder and to the home-screen metadata folder. Game art is written to `/user/appmeta/<title id>` in the same size and format as the original files. When the home-screen database (`app.db`) shows the game's tile art coming from somewhere PSGFX can't write, such as inside the game's own package, PSGFX writes the image to `/user/appmeta/<title id>/psgfx_*` and points the database at it. It keeps the original paths in `psgfx_original.json` for **Restore original art** and backs up the database first, as Home layout does. Backgrounds are encoded as BC7 DDS where the console uses DDS.
 
 `tools/mock_ps5.py` is a stand-in for the payload that serves a folder on your computer as if it were a PS5. Use it to develop without a console:
 

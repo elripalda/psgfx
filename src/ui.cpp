@@ -76,6 +76,8 @@ main{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:
 .stage-hint{position:absolute;right:2%;bottom:3%;font-size:12px;color:rgba(255,255,255,.75)}
 .staged-badge{position:absolute;top:3%;right:2%;padding:4px 10px;border-radius:999px;background:rgba(61,123,255,.85);font-size:12px;font-weight:600;display:none}
 
+.namerow{display:grid;gap:6px;max-width:480px}
+.namerow label{font-size:12.5px;color:var(--muted)}
 .slots{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
 .slot{background:var(--glass);border:1px solid var(--line);border-radius:var(--r-md);padding:14px;display:flex;gap:12px;align-items:center;min-height:92px}
 .slot .thumb{width:64px;height:64px;border-radius:10px;background:var(--bg2) center/cover no-repeat;flex:none;border:1px solid var(--line)}
@@ -211,6 +213,8 @@ main{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:
         <div class="drop d-icon" data-kind="icon">Icon</div>
       </div>
 
+      <div class="namerow" style="margin-top:20px"><label for="aname">Name on the home screen</label><input class="ltxt" id="aname" maxlength="80" autocomplete="off"></div>
+
       <div class="slots" style="margin-top:20px">
         <div class="slot" data-kind="icon"><div class="thumb"></div><div class="meta"><div class="t">Icon</div><div class="s">Square, 512 × 512 or larger</div><div class="row"><button class="btn pick">Choose image</button><button class="btn clear hidden">Remove</button></div></div></div>
         <div class="slot bgslot" data-kind="background"><div class="thumb"></div><div class="meta"><div class="t">Background</div><div class="s">16:9, ideally 3840 × 2160</div><div class="row"><button class="btn pick">Choose image</button><button class="btn clear hidden">Remove</button></div></div></div>
@@ -343,6 +347,7 @@ async function select(a, btn){
   st.staged = {};
   $('#welcome').classList.add('hidden'); $('#editor').classList.remove('hidden'); $('#log').style.display='none';
   $('#tname').textContent = a.title_name || a.title_id;
+  $('#aname').value = a.title_name || a.title_id;
   const game = a.kind === 'game';
   $('#anote').textContent = game ? 'Close the game first. The PS5 may put back its original art when the game updates.' : 'Close the app on your PS5 before applying.';
   refreshPreview(true);
@@ -364,9 +369,15 @@ function refreshPreview(loadCurrent){
     else if (s) { sEl.textContent = 'Ready to apply'; sEl.classList.remove('warn'); }
     else { sEl.textContent = {icon:'Square, 512 × 512 or larger',background:'16:9, ideally 3840 × 2160'}[k]; sEl.classList.remove('warn'); }
   });
-  const any = KINDS.some(k => st.staged[k]);
+  updateApply();
+}
+const newName = () => { const v = $('#aname').value.trim(); return v && v !== (st.sel.title_name || st.sel.title_id) ? v : null; };
+function updateApply(){
+  const any = KINDS.some(k => st.staged[k]) || !!newName();
   $('#apply').disabled = !any; $('#badge').style.display = any ? 'block' : 'none';
 }
+$('#aname').addEventListener('input', () => { $('#tname').textContent = $('#aname').value.trim() || st.sel.title_name || st.sel.title_id; updateApply(); });
+$('#aname').addEventListener('keydown', e => { if (e.key === 'Enter' && !$('#apply').disabled) $('#apply').click(); });
 
 async function stage(kind, file){
   const sl = document.querySelector(`.slot[data-kind="${kind}"] .s`);
@@ -405,12 +416,24 @@ stageEl.addEventListener('drop', e => {
 window.addEventListener('dragover', e => e.preventDefault()); window.addEventListener('drop', e => e.preventDefault());
 
 $('#apply').onclick = async () => {
-  const a = st.sel; $('#apply').disabled = true; showLog(['Converting and uploading to '+(a.title_name||a.title_id)+'…'], '');
+  const a = st.sel, art = KINDS.some(k => st.staged[k]), name = newName(), lines = [];
+  $('#apply').disabled = true; showLog([art ? 'Converting and uploading to '+(a.title_name||a.title_id)+'…' : 'Renaming '+(a.title_name||a.title_id)+'…'], '');
+  const ids = {title_id:a.title_id, src:a.src, kind:a.kind};
+  let artDone = false;
   try {
-    const j = await api('/api/apply', {method:'POST', body: JSON.stringify({title_id:a.title_id, src:a.src, kind:a.kind})});
-    showLog(j.log, 'ok'); st.staged = {}; refreshPreview(true);
-    refreshRailIcon(a);
-  } catch (err) { showLog(['Apply failed: '+err.message], 'bad'); $('#apply').disabled = false; }
+    if (art) {
+      const j = await api('/api/apply', {method:'POST', body: JSON.stringify(ids)});
+      lines.push(...j.log); st.staged = {}; artDone = true; refreshRailIcon(a);
+    }
+    if (name) {
+      const j = await api('/api/rename', {method:'POST', body: JSON.stringify({...ids, name})});
+      lines.push(...j.log); a.title_name = j.name; L.loaded = false;
+      const n = document.querySelector('.app[aria-current="true"] .n'); if (n) n.textContent = j.name;
+      $('#aname').value = j.name; $('#tname').textContent = j.name;
+    }
+    showLog(lines, 'ok');
+  } catch (err) { showLog([...lines, (art && !artDone ? 'Apply failed: ' : 'Rename failed: ')+err.message], 'bad'); }
+  if (artDone) refreshPreview(true); else updateApply();
 };
 $('#restore').onclick = async () => {
   const a = st.sel; showLog(['Restoring original art…'], '');

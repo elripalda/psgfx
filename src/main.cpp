@@ -118,273 +118,6 @@ static std::string meta_title(ps5::Client &c, const std::string &id) {
     return "";
 }
 
-// ─────────────────────────────── actions ──────────────────────────────
-// Homebrew registered by PS5 Upload (we know its folder) + installed games (edited in
-// /user/appmeta/<id>, where the home screen reads its art). System apps and nameless
-// leftovers are marked hidden so the list stays clean.
-static json list_apps() {
-    auto c = client();
-    std::map<std::string, std::string> src, name;
-    json reg = json::parse(c.call_str(ps5::APP_LIST_REGISTERED, "", ps5::APP_LIST_REGISTERED_ACK));
-    for (auto &a : reg.value("apps", json::array())) {
-        std::string id = a.value("title_id", "");
-        src[id] = a.value("src", "");
-        std::string n = a.value("title_name", "");
-        if (n != id) name[id] = n;
-    }
-    bool have_db = false;
-    try {   // Sony's app list with real names (newer PS5 Upload payloads)
-        json db = json::parse(c.call_str(ps5::APPDB_QUERY, "{}", ps5::APPDB_QUERY_ACK));
-        for (auto &a : db.value("apps", json::array())) {
-            std::string id = a.value("title_id", ""), n = a.value("name", "");
-            if (id.empty()) continue;
-            have_db = true;
-            if (!src.count(id)) src[id] = "";
-            if (!n.empty() && !name.count(id)) name[id] = n;
-        }
-    } catch (...) {}
-    std::set<std::string> metas;
-    for (auto &e : list_dir(c, "/user/appmeta")) metas.insert(e.value("name", ""));
-
-    json out = json::array();
-    for (auto &[id, s] : src) {
-        std::string kind = !s.empty() ? "homebrew"
-                         : (metas.count(id) && id.rfind("NPXS", 0) != 0) ? "game" : "other";
-        std::string n = name.count(id) ? name[id] : "";
-        if (n.empty() && kind != "other" && !have_db) n = meta_title(c, id);
-        bool hidden = kind == "other" || (kind == "game" && n.empty());
-        out.push_back({{"title_id", id}, {"title_name", n.empty() ? id : n}, {"src", s},
-                       {"kind", kind}, {"editable", kind != "other"}, {"hidden", hidden}});
-    }
-    std::stable_sort(out.begin(), out.end(), [](const json &a, const json &b) {
-        auto rank = [](const json &x) { return x["kind"] == "homebrew" ? 0 : x["kind"] == "game" ? 1 : 2; };
-        if (rank(a) != rank(b)) return rank(a) < rank(b);
-        return lower(a["title_name"].get<std::string>()) < lower(b["title_name"].get<std::string>());
-    });
-    return out;
-}
-
-static std::vector<uint8_t> fetch_icon(const std::string &id) {
-    {
-        std::lock_guard<std::mutex> l(g_mu);
-        auto it = g_icon_cache.find(id);
-        if (it != g_icon_cache.end()) return it->second;
-    }
-    auto c = client();
-    std::vector<uint8_t> bytes;
-    for (auto p : {appmeta(id) + "/icon0.png", "/user/app/" + id + "/icon0.png"}) {
-        try { bytes = c.read_file(p, 8u << 20); if (!bytes.empty()) break; } catch (...) {}
-    }
-    std::lock_guard<std::mutex> l(g_mu);
-    g_icon_cache[id] = bytes;
-    return bytes;
-}
-
-// Current background of an app, decoded and shrunk for the preview. Empty if none / unreadable.
-static std::vector<uint8_t> fetch_background(const std::string &id, const std::string &src) {
-    auto c = client();
-    std::vector<std::string> tries;
-    if (!src.empty()) tries.push_back(src + "/sce_sys/pic0.dds");
-    for (auto n : {"pic0.dds", "pic0.png", "pic1.png", "pic1.dds"}) tries.push_back(appmeta(id) + "/" + n);
-    for (auto &p : tries) {
-        try {
-            auto b = c.read_file(p, 64u << 20);
-            img::Image im;
-            if (img::from_bc7_dds(b, im) || img::decode(b, im)) return img::to_png(img::resize(im, 960, 540));
-        } catch (...) {}
-    }
-    return {};
-}
-
-static json stage(const std::string &kind, const std::vector<uint8_t> &bytes) {
-    Staged s;
-    if (!img::decode(bytes, s.src)) throw ps5::Error("That file isn't a PNG or JPEG image.");
-    const img::Image &src = s.src;
-    if (kind == "icon") {
-        s.preview_png = img::to_png(img::cover(src, 256, 256));
-        if (src.w != src.h) s.note = "Will be cropped to a square.";
-        else if (src.w < 512) s.note = "Small image - it may look soft.";
-    } else if (kind == "background") {
-        s.preview_png = img::to_png(img::cover(src, 960, 540));
-        if (std::abs(src.w * 9 - src.h * 16) > src.h) s.note = "Will be cropped to 16:9.";
-        else if (src.w < 1920) s.note = "Small image - it will look soft in 4K.";
-    } else {
-        throw ps5::Error("Unknown slot.");
-    }
-    std::lock_guard<std::mutex> l(g_mu);
-    g_staged[kind] = std::move(s);
-    return {{"ok", true}, {"note", g_staged[kind].note}};
-}
-
-// A file on the PS5 we're going to replace, and the format it has to stay in.
-struct Target { std::string name; bool dds = false; int w = 0, h = 0; };
-
-static std::vector<uint8_t> encode_for(const std::string &kind, const img::Image &src, const Target &t) {
-    img::Image im = img::cover(src, t.w, t.h);
-    img::opaque(im);
-    return t.dds ? img::to_bc7_dds(im) : img::to_png(im);
-}
-
-// Fixed layout for homebrew sce_sys (what PS5 titles ship).
-static std::vector<Target> homebrew_targets(const std::string &kind) {
-    if (kind == "icon") return {{"icon0.png", false, 512, 512}};
-    if (kind == "background") return {{"pic0.dds", true, 3840, 2160}, {"pic1.dds", true, 3840, 2160}};
-    return {};
-}
-
-// For installed games: whatever icon / background files the home screen already has,
-// kept in their own size and format. Unsupported formats are reported, not touched.
-static std::vector<Target> game_targets(ps5::Client &c, const std::string &id, const std::string &kind,
-                                        json &log, std::vector<std::string> &seen) {
-    std::vector<Target> out;
-    for (auto &e : list_dir(c, appmeta(id))) {
-        std::string name = e.value("name", ""), ln = lower(name);
-        if (e.value("kind", "") != "file") continue;
-        seen.push_back(name);
-        bool png = ends_with(ln, ".png"), dds = ends_with(ln, ".dds");
-        if (!png && !dds) continue;
-        bool want = kind == "icon" ? ln.rfind("icon0", 0) == 0
-                                   : (ln.rfind("pic0", 0) == 0 || ln.rfind("pic1", 0) == 0);
-        if (!want) continue;
-        std::vector<uint8_t> h;
-        try { h = c.call(ps5::FS_READ, json{{"path", appmeta(id) + "/" + name}, {"offset", 0}, {"limit", 160}}.dump(), ps5::FS_READ_ACK); }
-        catch (...) { continue; }
-        Target t; t.name = name; t.dds = dds;
-        if (png && h.size() >= 24 && memcmp(h.data(), "\x89PNG", 4) == 0) {
-            t.w = (int)(h[16] << 24 | h[17] << 16 | h[18] << 8 | h[19]);
-            t.h = (int)(h[20] << 24 | h[21] << 16 | h[22] << 8 | h[23]);
-        } else if (dds && h.size() >= 148 && memcmp(h.data(), "DDS ", 4) == 0 && memcmp(&h[84], "DX10", 4) == 0 &&
-                   (ps5::get32(&h[128]) == 98 || ps5::get32(&h[128]) == 99)) {
-            t.h = (int)ps5::get32(&h[12]); t.w = (int)ps5::get32(&h[16]);
-        } else {
-            log.push_back("Skipped " + name + " (a format this tool can't write yet)");
-            continue;
-        }
-        if (t.w < 16 || t.h < 16 || t.w > 8192 || t.h > 8192 || (t.dds && (t.w % 4 || t.h % 4))) {
-            log.push_back("Skipped " + name + " (unexpected size)");
-            continue;
-        }
-        out.push_back(t);
-    }
-    return out;
-}
-
-// Keep the first original as <name>.bak; mark files we create with <name>.added.
-static void backup_once(ps5::Client &c, const std::string &dir, const std::string &name, json &log) {
-    if (exists(c, dir, name + ".bak") || exists(c, dir, name + ".added")) return;
-    if (exists(c, dir, name)) { copy_file(c, dir + "/" + name, dir + "/" + name + ".bak", false); log.push_back("Backed up " + name); }
-    else c.call(ps5::FS_WRITE_BYTES, json{{"path", dir + "/" + name + ".added"}, {"bytes", "MQ=="}}.dump(), ps5::FS_WRITE_BYTES_ACK);
-}
-
-// Homebrew: copy the app's sce_sys art to where the home screen reads it, then ask PS5 Upload
-// to re-register. On 12.xx/13.xx Sony's installer call isn't reachable
-// (register_install_api_unavailable); the copies are what matter, so that's a note, not a failure.
-static void sync_home(ps5::Client &c, const std::string &id, const std::string &src,
-                      const std::vector<std::string> &names, json &log) {
-    const std::string dir = src + "/sce_sys";
-    auto have = list_dir(c, dir);
-    for (auto &name : names) {
-        bool present = false;
-        for (auto &e : have) if (e.value("name", "") == name) present = true;
-        if (!present) continue;
-        std::vector<std::string> dests = {appmeta(id) + "/" + name, "/user/app/" + id + "/sce_sys/" + name};
-        if (name == "icon0.png") dests.push_back("/user/app/" + id + "/icon0.png");
-        for (auto &d : dests) {
-            try { copy_file(c, dir + "/" + name, d, true); }
-            catch (const std::exception &e) { log.push_back("Couldn't update " + d + ": " + e.what()); }
-        }
-    }
-    try {
-        c.call_str(ps5::APP_REGISTER, json{{"src_path", src}}.dump(), ps5::APP_REGISTER_ACK, 60000);
-        log.push_back("Refreshed the home screen. If the old art still shows, restart the PS5.");
-    } catch (const std::exception &e) {
-        std::string m = e.what();
-        if (m.find("install_api_unavailable") != std::string::npos)
-            log.push_back("Done. Your firmware doesn't allow an instant home-screen refresh, so restart the PS5 to see the change.");
-        else
-            log.push_back("Done, but the refresh step said: " + m + ". Restart the PS5 to see the change.");
-    }
-}
-
-static json do_apply(const std::string &id, const std::string &src, const std::string &kind_of_app) {
-    json log = json::array();
-    std::map<std::string, Staged> staged;
-    { std::lock_guard<std::mutex> l(g_mu); staged = g_staged; }
-    if (staged.empty()) throw ps5::Error("Add at least one image first.");
-    auto c = client();
-
-    if (kind_of_app == "game") {
-        int written = 0;
-        std::vector<std::string> seen;
-        for (auto &[kind, s] : staged) {
-            auto targets = game_targets(c, id, kind, log, seen);
-            if (targets.empty()) log.push_back(std::string("This game has no ") + (kind == "icon" ? "icon" : "background") + " file this tool can replace.");
-            for (auto &t : targets) {
-                backup_once(c, appmeta(id), t.name, log);
-                auto bytes = encode_for(kind, s.src, t);
-                c.upload(appmeta(id) + "/" + t.name, bytes);
-                log.push_back("Replaced " + t.name + " (" + std::to_string(t.w) + "x" + std::to_string(t.h) + ")");
-                written++;
-            }
-        }
-        if (!written) {
-            std::string list; std::sort(seen.begin(), seen.end()); seen.erase(std::unique(seen.begin(), seen.end()), seen.end());
-            for (auto &n : seen) list += (list.empty() ? "" : ", ") + n;
-            throw ps5::Error("Nothing was changed. Files in this game's art folder: " + (list.empty() ? std::string("(none)") : list));
-        }
-        log.push_back("Done. Restart the PS5 to see the new art.");
-    } else {
-        if (src.empty()) throw ps5::Error("This app's folder is unknown.");
-        const std::string dir = src + "/sce_sys";
-        std::vector<std::string> changed;
-        for (auto &[kind, s] : staged) {
-            for (auto &t : homebrew_targets(kind)) {
-                changed.push_back(t.name);
-                backup_once(c, dir, t.name, log);
-                auto bytes = encode_for(kind, s.src, t);
-                c.upload(dir + "/" + t.name, bytes);
-                log.push_back("Uploaded " + t.name + " (" + std::to_string(bytes.size() / 1024) + " KB)");
-            }
-        }
-        sync_home(c, id, src, changed, log);
-    }
-    { std::lock_guard<std::mutex> l(g_mu); g_icon_cache.erase(id); g_staged.clear(); }
-    return {{"ok", true}, {"log", log}};
-}
-
-static json do_restore(const std::string &id, const std::string &src, const std::string &kind_of_app) {
-    json log = json::array();
-    auto c = client();
-    const std::string dir = kind_of_app == "game" ? appmeta(id) : src + "/sce_sys";
-    if (kind_of_app != "game" && src.empty()) throw ps5::Error("This app's folder is unknown.");
-    std::vector<std::string> names;
-    for (auto &e : list_dir(c, dir)) {
-        std::string n = e.value("name", "");
-        if (ends_with(n, ".bak")) names.push_back(n.substr(0, n.size() - 4));
-        else if (ends_with(n, ".added")) names.push_back(n.substr(0, n.size() - 6));
-    }
-    if (names.empty()) throw ps5::Error("Nothing to restore - this still has its original art.");
-    for (auto &name : names) {
-        const std::string path = dir + "/" + name;
-        if (exists(c, dir, name + ".bak")) {
-            copy_file(c, path + ".bak", path, true);
-            c.call(ps5::FS_DELETE, json{{"path", path + ".bak"}}.dump(), ps5::FS_DELETE_ACK);
-            log.push_back("Restored " + name);
-        } else {
-            try { c.call(ps5::FS_DELETE, json{{"path", path}}.dump(), ps5::FS_DELETE_ACK); } catch (...) {}
-            c.call(ps5::FS_DELETE, json{{"path", path + ".added"}}.dump(), ps5::FS_DELETE_ACK);
-            if (kind_of_app != "game")   // registering copied it here too, and never deletes
-                for (const std::string &copy : {appmeta(id) + "/" + name, "/user/app/" + id + "/sce_sys/" + name})
-                    try { c.call(ps5::FS_DELETE, json{{"path", copy}}.dump(), ps5::FS_DELETE_ACK); } catch (...) {}
-            log.push_back("Removed " + name + " (it wasn't there originally)");
-        }
-    }
-    if (kind_of_app == "game") log.push_back("Done. Restart the PS5 to see the original art.");
-    else sync_home(c, id, src, names, log);
-    { std::lock_guard<std::mutex> l(g_mu); g_icon_cache.erase(id); }
-    return {{"ok", true}, {"log", log}};
-}
-
 // ─────────────────────────────── home layout ──────────────────────────
 // Edits the home-screen database through PS5 Upload's built-in FTP server (see ftp.h).
 // Every apply re-downloads the database, saves it to PSGFX Layout/backups first, edits
@@ -550,6 +283,468 @@ static json layout_presets() {
     return {{"ok", true}, {"presets", names}};
 }
 
+// ─────────────────────────────── actions ──────────────────────────────
+// Homebrew registered by PS5 Upload (we know its folder) + installed games (in Sony's app
+// list or with a /user/appmeta/<id> folder). System apps and nameless leftovers are
+// marked hidden so the list stays clean.
+static json list_apps() {
+    auto c = client();
+    std::map<std::string, std::string> src, name;
+    json reg = json::parse(c.call_str(ps5::APP_LIST_REGISTERED, "", ps5::APP_LIST_REGISTERED_ACK));
+    for (auto &a : reg.value("apps", json::array())) {
+        std::string id = a.value("title_id", "");
+        src[id] = a.value("src", "");
+        std::string n = a.value("title_name", "");
+        if (n != id) name[id] = n;
+    }
+    bool have_db = false;
+    std::set<std::string> in_db;
+    try {   // Sony's app list with real names (newer PS5 Upload payloads)
+        json db = json::parse(c.call_str(ps5::APPDB_QUERY, "{}", ps5::APPDB_QUERY_ACK));
+        for (auto &a : db.value("apps", json::array())) {
+            std::string id = a.value("title_id", ""), n = a.value("name", "");
+            if (id.empty()) continue;
+            have_db = true;
+            in_db.insert(id);
+            if (!src.count(id)) src[id] = "";
+            if (!n.empty() && !name.count(id)) name[id] = n;
+        }
+    } catch (...) {}
+    std::set<std::string> metas;
+    for (auto &e : list_dir(c, "/user/appmeta")) metas.insert(e.value("name", ""));
+
+    json out = json::array();
+    for (auto &[id, s] : src) {
+        std::string kind = !s.empty() ? "homebrew"
+                         : ((metas.count(id) || in_db.count(id)) && id.rfind("NPXS", 0) != 0) ? "game" : "other";
+        std::string n = name.count(id) ? name[id] : "";
+        if (n.empty() && kind != "other" && !have_db) n = meta_title(c, id);
+        bool hidden = kind == "other" || (kind == "game" && n.empty());
+        out.push_back({{"title_id", id}, {"title_name", n.empty() ? id : n}, {"src", s},
+                       {"kind", kind}, {"editable", kind != "other"}, {"hidden", hidden}});
+    }
+    std::stable_sort(out.begin(), out.end(), [](const json &a, const json &b) {
+        auto rank = [](const json &x) { return x["kind"] == "homebrew" ? 0 : x["kind"] == "game" ? 1 : 2; };
+        if (rank(a) != rank(b)) return rank(a) < rank(b);
+        return lower(a["title_name"].get<std::string>()) < lower(b["title_name"].get<std::string>());
+    });
+    return out;
+}
+
+static std::vector<uint8_t> fetch_icon(const std::string &id) {
+    {
+        std::lock_guard<std::mutex> l(g_mu);
+        auto it = g_icon_cache.find(id);
+        if (it != g_icon_cache.end()) return it->second;
+    }
+    auto c = client();
+    std::vector<uint8_t> bytes;
+    for (auto p : {appmeta(id) + "/icon0.png", "/user/app/" + id + "/icon0.png"}) {
+        try { bytes = c.read_file(p, 8u << 20); if (!bytes.empty()) break; } catch (...) {}
+    }
+    std::lock_guard<std::mutex> l(g_mu);
+    g_icon_cache[id] = bytes;
+    return bytes;
+}
+
+// Current background of an app, decoded and shrunk for the preview. Empty if none / unreadable.
+static std::vector<uint8_t> fetch_background(const std::string &id, const std::string &src) {
+    auto c = client();
+    std::vector<std::string> tries;
+    if (!src.empty()) tries.push_back(src + "/sce_sys/pic0.dds");
+    for (auto n : {"pic0.dds", "pic0.png", "pic1.png", "pic1.dds"}) tries.push_back(appmeta(id) + "/" + n);
+    for (auto &p : tries) {
+        try {
+            auto b = c.read_file(p, 64u << 20);
+            img::Image im;
+            if (img::from_bc7_dds(b, im) || img::decode(b, im)) return img::to_png(img::resize(im, 960, 540));
+        } catch (...) {}
+    }
+    return {};
+}
+
+static json stage(const std::string &kind, const std::vector<uint8_t> &bytes) {
+    Staged s;
+    if (!img::decode(bytes, s.src)) throw ps5::Error("That file isn't a PNG or JPEG image.");
+    const img::Image &src = s.src;
+    if (kind == "icon") {
+        s.preview_png = img::to_png(img::cover(src, 256, 256));
+        if (src.w != src.h) s.note = "Will be cropped to a square.";
+        else if (src.w < 512) s.note = "Small image - it may look soft.";
+    } else if (kind == "background") {
+        s.preview_png = img::to_png(img::cover(src, 960, 540));
+        if (std::abs(src.w * 9 - src.h * 16) > src.h) s.note = "Will be cropped to 16:9.";
+        else if (src.w < 1920) s.note = "Small image - it will look soft in 4K.";
+    } else {
+        throw ps5::Error("Unknown slot.");
+    }
+    std::lock_guard<std::mutex> l(g_mu);
+    g_staged[kind] = std::move(s);
+    return {{"ok", true}, {"note", g_staged[kind].note}};
+}
+
+// A file on the PS5 we're going to replace, and the format it has to stay in.
+struct Target { std::string name; bool dds = false; int w = 0, h = 0; };
+
+static std::vector<uint8_t> encode_for(const std::string &kind, const img::Image &src, const Target &t) {
+    img::Image im = img::cover(src, t.w, t.h);
+    img::opaque(im);
+    return t.dds ? img::to_bc7_dds(im) : img::to_png(im);
+}
+
+// Fixed layout for homebrew sce_sys (what PS5 titles ship).
+static std::vector<Target> homebrew_targets(const std::string &kind) {
+    if (kind == "icon") return {{"icon0.png", false, 512, 512}};
+    if (kind == "background") return {{"pic0.dds", true, 3840, 2160}, {"pic1.dds", true, 3840, 2160}};
+    return {};
+}
+
+// For installed games: whatever icon / background files the home screen already has,
+// kept in their own size and format. Unsupported formats are reported, not touched.
+static std::vector<Target> game_targets(ps5::Client &c, const std::string &id, const std::string &kind,
+                                        json &log, std::vector<std::string> &seen) {
+    std::vector<Target> out;
+    for (auto &e : list_dir(c, appmeta(id))) {
+        std::string name = e.value("name", ""), ln = lower(name);
+        std::string ek = e.value("kind", "");
+        if (ek != "file") { if (ek == "link") seen.push_back(name + " (link)"); continue; }
+        seen.push_back(name);
+        bool png = ends_with(ln, ".png"), dds = ends_with(ln, ".dds");
+        if (!png && !dds) continue;
+        bool want = kind == "icon" ? ln.rfind("icon0", 0) == 0
+                                   : (ln.rfind("pic0", 0) == 0 || ln.rfind("pic1", 0) == 0);
+        if (!want) continue;
+        std::vector<uint8_t> h;
+        try { h = c.call(ps5::FS_READ, json{{"path", appmeta(id) + "/" + name}, {"offset", 0}, {"limit", 160}}.dump(), ps5::FS_READ_ACK); }
+        catch (...) { continue; }
+        Target t; t.name = name; t.dds = dds;
+        if (png && h.size() >= 24 && memcmp(h.data(), "\x89PNG", 4) == 0) {
+            t.w = (int)(h[16] << 24 | h[17] << 16 | h[18] << 8 | h[19]);
+            t.h = (int)(h[20] << 24 | h[21] << 16 | h[22] << 8 | h[23]);
+        } else if (dds && h.size() >= 148 && memcmp(h.data(), "DDS ", 4) == 0 && memcmp(&h[84], "DX10", 4) == 0 &&
+                   (ps5::get32(&h[128]) == 98 || ps5::get32(&h[128]) == 99)) {
+            t.h = (int)ps5::get32(&h[12]); t.w = (int)ps5::get32(&h[16]);
+        } else {
+            log.push_back("Skipped " + name + " (a format this tool can't write yet)");
+            continue;
+        }
+        if (t.w < 16 || t.h < 16 || t.w > 8192 || t.h > 8192 || (t.dds && (t.w % 4 || t.h % 4))) {
+            log.push_back("Skipped " + name + " (unexpected size)");
+            continue;
+        }
+        out.push_back(t);
+    }
+    return out;
+}
+
+// Keep the first original as <name>.bak; mark files we create with <name>.added.
+static void backup_once(ps5::Client &c, const std::string &dir, const std::string &name, json &log) {
+    if (exists(c, dir, name + ".bak") || exists(c, dir, name + ".added")) return;
+    if (exists(c, dir, name)) { copy_file(c, dir + "/" + name, dir + "/" + name + ".bak", false); log.push_back("Backed up " + name); }
+    else c.call(ps5::FS_WRITE_BYTES, json{{"path", dir + "/" + name + ".added"}, {"bytes", "MQ=="}}.dump(), ps5::FS_WRITE_BYTES_ACK);
+}
+
+// Homebrew: copy the app's sce_sys art to where the home screen reads it, then ask PS5 Upload
+// to re-register. On 12.xx/13.xx Sony's installer call isn't reachable
+// (register_install_api_unavailable); the copies are what matter, so that's a note, not a failure.
+static void sync_home(ps5::Client &c, const std::string &id, const std::string &src,
+                      const std::vector<std::string> &names, json &log) {
+    const std::string dir = src + "/sce_sys";
+    auto have = list_dir(c, dir);
+    for (auto &name : names) {
+        bool present = false;
+        for (auto &e : have) if (e.value("name", "") == name) present = true;
+        if (!present) continue;
+        std::vector<std::string> dests = {appmeta(id) + "/" + name, "/user/app/" + id + "/sce_sys/" + name};
+        if (name == "icon0.png") dests.push_back("/user/app/" + id + "/icon0.png");
+        for (auto &d : dests) {
+            try { copy_file(c, dir + "/" + name, d, true); }
+            catch (const std::exception &e) { log.push_back("Couldn't update " + d + ": " + e.what()); }
+        }
+    }
+    try {
+        c.call_str(ps5::APP_REGISTER, json{{"src_path", src}}.dump(), ps5::APP_REGISTER_ACK, 60000);
+        log.push_back("Refreshed the home screen. If the old art still shows, restart the PS5.");
+    } catch (const std::exception &e) {
+        std::string m = e.what();
+        if (m.find("install_api_unavailable") != std::string::npos)
+            log.push_back("Done. Your firmware doesn't allow an instant home-screen refresh, so restart the PS5 to see the change.");
+        else
+            log.push_back("Done, but the refresh step said: " + m + ". Restart the PS5 to see the change.");
+    }
+}
+
+// ── Installed games: the art the home screen actually draws ──
+// The home screen draws each tile from the paths in its app.db concept row (icon0Info,
+// pic0Info). For many installed games those point into the game's own read-only package,
+// not /user/appmeta, so replacing files in the game's art folder can't change what's shown.
+// For those, PSGFX writes the new image to /user/appmeta/<id>/psgfx_<name>_<time> and points
+// the database at it. The original paths are kept in psgfx_original.json in that folder for
+// Restore, and the database is backed up first, as Home layout does.
+static const char *const ORIGINALS = "psgfx_original.json";
+static std::string art_column(const std::string &kind) { return kind == "icon" ? "icon0Info" : "pic0Info"; }
+
+// Size and format from an image's first bytes; false if it isn't a PNG or DDS we can match.
+static bool probe_art(const std::vector<uint8_t> &h, Target &t) {
+    if (h.size() >= 24 && memcmp(h.data(), "\x89PNG", 4) == 0) {
+        t.dds = false;
+        t.w = (int)(h[16] << 24 | h[17] << 16 | h[18] << 8 | h[19]);
+        t.h = (int)(h[20] << 24 | h[21] << 16 | h[22] << 8 | h[23]);
+    } else if (h.size() >= 20 && memcmp(h.data(), "DDS ", 4) == 0) {
+        t.dds = true; t.h = (int)ps5::get32(&h[12]); t.w = (int)ps5::get32(&h[16]);
+    } else {
+        return false;
+    }
+    return t.w >= 16 && t.h >= 16 && t.w <= 8192 && t.h <= 8192 && (!t.dds || (t.w % 4 == 0 && t.h % 4 == 0));
+}
+
+static std::vector<uint8_t> read_head(ps5::Client &c, const std::string &path) {
+    try { return c.call(ps5::FS_READ, json{{"path", path}, {"offset", 0}, {"limit", 160}}.dump(), ps5::FS_READ_ACK); }
+    catch (...) {}
+    try { return with_ftp([&](ftp::Session &f) { return f.get(path); }); }   // outside /user and /data
+    catch (...) { return {}; }
+}
+
+// Sets an art column for this title in every table that has it (all user profiles).
+static void set_art_column(layout::DB &db, const layout::Info &info, const std::string &id, const std::string &concept,
+                           const std::string &col, const std::string &value) {
+    for (auto &[table, cols] : info.cols) {
+        if (!cols.count(col)) continue;
+        if (cols.count("localConceptId") && !concept.empty())
+            db.exec("UPDATE " + layout::q(table) + " SET " + layout::q(col) + "=? WHERE localConceptId=?", {value, concept});
+        else if (cols.count("titleId"))
+            db.exec("UPDATE " + layout::q(table) + " SET " + layout::q(col) + "=? WHERE titleId=?", {value, id});
+    }
+}
+
+static std::string concept_of(layout::DB &db, const layout::Info &info, const std::string &id) {
+    return db.scalar_str("SELECT localConceptId FROM " + layout::q(info.icon_t) + " WHERE titleId=?", {id});
+}
+
+static void upload_db(const std::vector<uint8_t> &orig, layout::DB &db, const std::string &label, json &log) {
+    std::string backup = make_backup(orig, label);
+    auto out = db.serialize();
+    { layout::DB check(out); }   // throws if the edit broke it; nothing is uploaded then
+    with_ftp([&](ftp::Session &f) { f.put(layout::DB_PATH, out); return 0; });
+    { std::lock_guard<std::mutex> l(g_mu); g_tile_img_cache.clear(); }
+    log.push_back("Home-screen database updated (backup " + backup + ")");
+}
+
+static json read_originals(ps5::Client &c, const std::string &id) {
+    if (!exists(c, appmeta(id), ORIGINALS)) return json::object();
+    try { auto b = c.read_file(appmeta(id) + "/" + ORIGINALS, 1u << 20); return json::parse(b.begin(), b.end()); }
+    catch (...) { return json::object(); }
+}
+
+// Returns the staged slots it handled; the rest fall back to replacing the art-folder files.
+static std::set<std::string> game_apply_db(ps5::Client &c, const std::string &id, const std::map<std::string, Staged> &staged, json &log) {
+    std::set<std::string> done;
+    std::lock_guard<std::mutex> l(g_layout_mu);
+    std::vector<uint8_t> orig;
+    try { orig = pull_db(); }
+    catch (const std::exception &e) {
+        log.push_back(std::string("Couldn't read the home-screen database (") + e.what() + "), so only the game's art folder was checked.");
+        return done;
+    }
+    layout::DB db(orig);
+    auto info = layout::analyze(db, g_layout_user);
+    if (info.concept_t.empty()) return done;
+    std::string concept = concept_of(db, info, id);
+    if (concept.empty()) return done;
+
+    const std::string dir = appmeta(id);
+    json originals = read_originals(c, id);
+    std::vector<std::string> replaced;   // our older files, deleted once the database points away from them
+    for (auto &[kind, s] : staged) {
+        const std::string col = art_column(kind);
+        std::string value = db.scalar_str("SELECT " + layout::q(col) + " FROM " + layout::q(info.concept_t) + " WHERE localConceptId=?", {concept});
+        std::string path = layout::strip_query(value);
+        if (path.empty() || path[0] != '/') continue;
+        std::string base = path.substr(path.find_last_of('/') + 1);
+        bool in_dir = path == dir + "/" + base, ours = in_dir && base.rfind("psgfx_", 0) == 0;
+        if (in_dir && !ours) {   // a real file in the art folder: replacing it in place works
+            bool regular = false;
+            for (auto &e : list_dir(c, dir)) if (e.value("name", "") == base && e.value("kind", "") == "file") regular = true;
+            if (regular) continue;
+        }
+        Target t;
+        if (!probe_art(read_head(c, path), t)) {
+            t.dds = ends_with(lower(base), ".dds");
+            t.w = kind == "icon" ? 512 : t.dds ? 3840 : 1920;
+            t.h = kind == "icon" ? 512 : t.dds ? 2160 : 1080;
+        }
+        std::string stem = kind == "icon" ? "icon0" : "pic0";
+        t.name = "psgfx_" + stem + "_" + now_stamp("%Y%m%d%H%M%S") + (t.dds ? ".dds" : ".png");
+        c.upload(dir + "/" + t.name, encode_for(kind, s.src, t));
+        log.push_back("Uploaded " + t.name + " (" + std::to_string(t.w) + "x" + std::to_string(t.h) + ")");
+        if (!originals.contains(col)) originals[col] = value;
+        if (ours) replaced.push_back(dir + "/" + base);
+        size_t qp = value.find('?');
+        set_art_column(db, info, id, concept, col, dir + "/" + t.name + (qp == std::string::npos ? "" : value.substr(qp)));
+        done.insert(kind);
+    }
+    if (done.empty()) return done;
+    std::string o = originals.dump(2);
+    c.upload(dir + "/" + ORIGINALS, std::vector<uint8_t>(o.begin(), o.end()));
+    upload_db(orig, db, "Before new art for " + id, log);
+    for (auto &p : replaced) try { c.call(ps5::FS_DELETE, json{{"path", p}}.dump(), ps5::FS_DELETE_ACK); } catch (...) {}
+    return done;
+}
+
+// Points the database back at the game's own art. False if PSGFX never repointed it.
+static bool game_restore_db(ps5::Client &c, const std::string &id, json &log) {
+    json originals = read_originals(c, id);
+    if (originals.empty()) return false;
+    {
+        std::lock_guard<std::mutex> l(g_layout_mu);
+        auto orig = pull_db();
+        layout::DB db(orig);
+        auto info = layout::analyze(db, g_layout_user);
+        std::string concept = concept_of(db, info, id);
+        for (auto &[col, value] : originals.items())
+            if (value.is_string()) set_art_column(db, info, id, concept, col, value.get<std::string>());
+        upload_db(orig, db, "Before restoring art for " + id, log);
+    }
+    for (auto &e : list_dir(c, appmeta(id))) {
+        std::string n = e.value("name", "");
+        if (n.rfind("psgfx_", 0) == 0) try { c.call(ps5::FS_DELETE, json{{"path", appmeta(id) + "/" + n}}.dump(), ps5::FS_DELETE_ACK); } catch (...) {}
+    }
+    log.push_back("Pointed the home screen back at the game's own art");
+    return true;
+}
+
+static json do_apply(const std::string &id, const std::string &src, const std::string &kind_of_app) {
+    json log = json::array();
+    std::map<std::string, Staged> staged;
+    { std::lock_guard<std::mutex> l(g_mu); staged = g_staged; }
+    if (staged.empty()) throw ps5::Error("Add at least one image first.");
+    auto c = client();
+
+    if (kind_of_app == "game") {
+        auto via_db = game_apply_db(c, id, staged, log);
+        int written = (int)via_db.size();
+        std::vector<std::string> seen;
+        for (auto &[kind, s] : staged) {
+            if (via_db.count(kind)) continue;
+            auto targets = game_targets(c, id, kind, log, seen);
+            if (targets.empty()) log.push_back(std::string("This game has no ") + (kind == "icon" ? "icon" : "background") + " file this tool can replace.");
+            for (auto &t : targets) {
+                backup_once(c, appmeta(id), t.name, log);
+                auto bytes = encode_for(kind, s.src, t);
+                c.upload(appmeta(id) + "/" + t.name, bytes);
+                log.push_back("Replaced " + t.name + " (" + std::to_string(t.w) + "x" + std::to_string(t.h) + ")");
+                written++;
+            }
+        }
+        if (!written) {
+            std::string list; std::sort(seen.begin(), seen.end()); seen.erase(std::unique(seen.begin(), seen.end()), seen.end());
+            for (auto &n : seen) list += (list.empty() ? "" : ", ") + n;
+            std::string notes;
+            for (auto &n : log) notes += " " + n.get<std::string>();
+            throw ps5::Error("Nothing was changed. Files in this game's art folder: " + (list.empty() ? std::string("(none)") : list) + "." + notes);
+        }
+        log.push_back("Done. Restart the PS5 to see the new art.");
+    } else {
+        if (src.empty()) throw ps5::Error("This app's folder is unknown.");
+        const std::string dir = src + "/sce_sys";
+        std::vector<std::string> changed;
+        for (auto &[kind, s] : staged) {
+            for (auto &t : homebrew_targets(kind)) {
+                changed.push_back(t.name);
+                backup_once(c, dir, t.name, log);
+                auto bytes = encode_for(kind, s.src, t);
+                c.upload(dir + "/" + t.name, bytes);
+                log.push_back("Uploaded " + t.name + " (" + std::to_string(bytes.size() / 1024) + " KB)");
+            }
+        }
+        sync_home(c, id, src, changed, log);
+    }
+    { std::lock_guard<std::mutex> l(g_mu); g_icon_cache.erase(id); g_staged.clear(); }
+    return {{"ok", true}, {"log", log}};
+}
+
+static json do_restore(const std::string &id, const std::string &src, const std::string &kind_of_app) {
+    json log = json::array();
+    auto c = client();
+    const std::string dir = kind_of_app == "game" ? appmeta(id) : src + "/sce_sys";
+    if (kind_of_app != "game" && src.empty()) throw ps5::Error("This app's folder is unknown.");
+    bool repointed = kind_of_app == "game" && game_restore_db(c, id, log);
+    std::vector<std::string> names;
+    for (auto &e : list_dir(c, dir)) {
+        std::string n = e.value("name", "");
+        if (ends_with(n, ".bak")) names.push_back(n.substr(0, n.size() - 4));
+        else if (ends_with(n, ".added")) names.push_back(n.substr(0, n.size() - 6));
+    }
+    if (names.empty() && !repointed) throw ps5::Error("Nothing to restore - this still has its original art.");
+    for (auto &name : names) {
+        const std::string path = dir + "/" + name;
+        if (exists(c, dir, name + ".bak")) {
+            copy_file(c, path + ".bak", path, true);
+            c.call(ps5::FS_DELETE, json{{"path", path + ".bak"}}.dump(), ps5::FS_DELETE_ACK);
+            log.push_back("Restored " + name);
+        } else {
+            try { c.call(ps5::FS_DELETE, json{{"path", path}}.dump(), ps5::FS_DELETE_ACK); } catch (...) {}
+            c.call(ps5::FS_DELETE, json{{"path", path + ".added"}}.dump(), ps5::FS_DELETE_ACK);
+            if (kind_of_app != "game")   // registering copied it here too, and never deletes
+                for (const std::string &copy : {appmeta(id) + "/" + name, "/user/app/" + id + "/sce_sys/" + name})
+                    try { c.call(ps5::FS_DELETE, json{{"path", copy}}.dump(), ps5::FS_DELETE_ACK); } catch (...) {}
+            log.push_back("Removed " + name + " (it wasn't there originally)");
+        }
+    }
+    if (kind_of_app == "game") log.push_back("Done. Restart the PS5 to see the original art.");
+    else sync_home(c, id, src, names, log);
+    { std::lock_guard<std::mutex> l(g_mu); g_icon_cache.erase(id); }
+    return {{"ok", true}, {"log", log}};
+}
+
+// Homebrew keeps its name in sce_sys/param.json, and re-registering (which Apply does) copies
+// it to the home screen. Update it there too, so changing art later doesn't undo a rename.
+// The first original is kept as param.json.orig (not .bak, so Restore original art leaves it).
+static void rename_homebrew_param(ps5::Client &c, const std::string &id, const std::string &src, const std::string &name, json &log) {
+    const std::string dir = src + "/sce_sys";
+    try {
+        auto b = c.read_file(dir + "/param.json", 1u << 20);
+        auto j = nlohmann::ordered_json::parse(b.begin(), b.end());
+        int n = 0;
+        if (j.contains("localizedParameters") && j["localizedParameters"].is_object())
+            for (auto &[lang, v] : j["localizedParameters"].items())
+                if (v.is_object() && v.contains("titleName")) { v["titleName"] = name; n++; }
+        if (!n) { log.push_back("This app's param.json has no name to update; only the home screen was renamed."); return; }
+        if (!exists(c, dir, "param.json.orig")) copy_file(c, dir + "/param.json", dir + "/param.json.orig", false);
+        std::string out = j.dump(2);
+        c.upload(dir + "/param.json", std::vector<uint8_t>(out.begin(), out.end()));
+        for (auto &d : {appmeta(id) + "/param.json", "/user/app/" + id + "/sce_sys/param.json"})
+            try { if (exists(c, d.substr(0, d.find_last_of('/')), "param.json")) copy_file(c, dir + "/param.json", d, true); } catch (...) {}
+        log.push_back("Updated the name in the app's param.json");
+    } catch (const std::exception &e) {
+        log.push_back(std::string("Couldn't update the app's param.json (") + e.what() + "). Changing its art later may bring back the old name.");
+    }
+}
+
+// Renames a title on the home screen with the same database edit Home layout uses.
+static json do_rename(const std::string &id, const std::string &src, const std::string &kind_of_app, std::string name) {
+    while (!name.empty() && isspace((unsigned char)name.back())) name.pop_back();
+    while (!name.empty() && isspace((unsigned char)name.front())) name.erase(0, 1);
+    if (name.empty()) throw ps5::Error("Enter a name.");
+    json log = json::array();
+    auto c = client();
+    {
+        std::lock_guard<std::mutex> l(g_layout_mu);
+        auto orig = pull_db();
+        layout::DB db(orig);
+        auto info = layout::analyze(db, g_layout_user);
+        const layout::Tile *t = info.find(id);
+        if (!t) throw ps5::Error("This title isn't in the home screen's list, so it can't be renamed there.");
+        std::vector<std::string> lines;
+        layout::apply(db, info, json{{"edits", {{id, {{"name", name}}}}}}, lines);
+        for (auto &x : lines) log.push_back(x);
+        upload_db(orig, db, "Before renaming " + t->name, log);
+    }
+    if (kind_of_app == "homebrew" && !src.empty()) rename_homebrew_param(c, id, src, name, log);
+    log.push_back("Done. Restart the PS5 to see the new name.");
+    return {{"ok", true}, {"log", log}, {"name", name}};
+}
+
 // ─────────────────────────────── tiny HTTP server ─────────────────────
 struct Req { std::string method, path, query; std::map<std::string, std::string> q; std::vector<uint8_t> body; };
 
@@ -662,6 +857,10 @@ static void handle(sock_t s, Req &r) {
             json j = json::parse(std::string(r.body.begin(), r.body.end()));
             auto id = j.value("title_id", ""), src = j.value("src", ""), kind = j.value("kind", "homebrew");
             respond_json(s, r.path == "/api/apply" ? do_apply(id, src, kind) : do_restore(id, src, kind)); return;
+        }
+        if (r.path == "/api/rename" && r.method == "POST") {
+            json j = json::parse(std::string(r.body.begin(), r.body.end()));
+            respond_json(s, do_rename(j.value("title_id", ""), j.value("src", ""), j.value("kind", "homebrew"), j.value("name", ""))); return;
         }
         if (r.path == "/api/layout/load" && r.method == "POST") {
             json j = json::parse(std::string(r.body.begin(), r.body.end()));
