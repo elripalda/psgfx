@@ -194,7 +194,7 @@ main{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:
   <main>
     <section class="welcome" id="welcome">
       <h1>New art for your homebrew and games.</h1>
-      <p>Make sure PS5 Upload's payload is running on your console, then enter your PS5's IP above. Pick an app or game, drop images onto the preview, and apply.</p>
+      <p>Open the PS5 Upload app (6.0 or newer) on this PC and connect it to your console, then enter your PS5's IP above. Pick an app or game, drop images onto the preview, and apply.</p>
     </section>
 
     <section id="editor" class="hidden" aria-label="Artwork editor">

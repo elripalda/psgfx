@@ -1,34 +1,20 @@
 // Minimal FTP client, used only for the home-screen database.
 //
-// PS5 Upload's own file commands only write under /data, /user and USB drives, but the
-// home screen lives in /system_data/priv/mms/app.db. The payload can start its built-in
-// FTP server on request (management frame FTP_START), and that server can reach the
-// whole filesystem, so the Home layout feature goes through it.
+// PS5 Upload's file commands can read /system_data but not write it, and the home screen lives in
+// /system_data/priv/mms/app.db. PS5 Upload 6 no longer has a built-in FTP server, so PSGFX uses
+// one that is already running on the console: etaHEN's (port 1337) or ftpsrv (port 2121).
 #pragma once
 #include "ps5client.h"
-#include "lib/json.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace ftp {
 
 using ps5::Error;
-
-constexpr uint16_t FTP_START = 224, FTP_START_ACK = 225;
-constexpr int DEFAULT_PORT = 2122;
-
-// Ask PS5 Upload's payload to start its FTP server; returns the port it listens on.
-inline int start_server(ps5::Client &c) {
-    std::string body = nlohmann::json{{"port", DEFAULT_PORT}, {"root", "/"}, {"readonly", false}}.dump();
-    auto j = nlohmann::json::parse(c.call_str(FTP_START, body, FTP_START_ACK, 15000));
-    std::string err = j.value("error", "");
-    if (j.value("ok", false) || err == "already_running") return j.value("port", DEFAULT_PORT) ? j.value("port", DEFAULT_PORT) : DEFAULT_PORT;
-    if (err == "stopping") throw Error("PS5 Upload's file server is still shutting down. Try again in a few seconds.");
-    throw Error("PS5 Upload couldn't start its file server (" + err + ").");
-}
 
 class Session {
   public:
@@ -169,5 +155,17 @@ class Session {
         return dial(host_, p1 * 256 + p2);
     }
 };
+
+// Connects to the first FTP server that answers: PSGFX_FTP_PORT if set, else etaHEN (1337),
+// ftpsrv (2121), then the standard port 21.
+inline std::unique_ptr<Session> open(const std::string &host) {
+    std::vector<int> ports{1337, 2121, 21};
+    if (const char *e = getenv("PSGFX_FTP_PORT")) ports = {atoi(e)};
+    for (int port : ports) {
+        try { return std::make_unique<Session>(host, port); } catch (const Error &) {}
+    }
+    throw Error("Home layout needs an FTP server running on the PS5 (etaHEN's FTP on port 1337, or ftpsrv on 2121); "
+                "PS5 Upload 6 no longer includes one. Start one and try again.");
+}
 
 }  // namespace ftp

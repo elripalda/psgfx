@@ -1,7 +1,7 @@
 // PSGFX - change the home-screen icon and background of PS5 homebrew and installed games,
 // through PS5 Upload's payload.
 // Runs a tiny local web server and opens the UI in the default browser.
-// Talks to PS5 Upload's resident payload (ports 9114 / 9113); nothing is installed on the PS5.
+// Talks to PS5 Upload's payload through the PS5 Upload app's local engine (see ps5client.h); nothing is installed on the PS5.
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
@@ -62,9 +62,8 @@ static void save_config() {
 
 static ps5::Client client() {
     ps5::Client c; c.host = g_ip;
-    if (const char *e = getenv("PS5AS_HOST")) c.host = e;                  // test hooks (mock PS5)
-    if (const char *e = getenv("PS5AS_MGMT_PORT")) c.mgmt_port = atoi(e);
-    if (const char *e = getenv("PS5AS_XFER_PORT")) c.xfer_port = atoi(e);
+    if (const char *e = getenv("PS5AS_HOST")) c.host = e;                  // test hooks (mock engine)
+    if (const char *e = getenv("PSGFX_ENGINE_PORT")) c.engine_port = atoi(e);   // PS5 Upload's engine, if moved
     return c;
 }
 
@@ -124,7 +123,7 @@ static std::string meta_title(ps5::Client &c, const std::string &id) {
 }
 
 // ─────────────────────────────── home layout ──────────────────────────
-// Edits the home-screen database through PS5 Upload's built-in FTP server (see ftp.h).
+// Edits the home-screen database over FTP (etaHEN's or ftpsrv; see ftp.h).
 // Every apply re-downloads the database, saves it to PSGFX Layout/backups first, edits
 // a copy in memory, checks it, then uploads it.
 namespace fs = std::filesystem;
@@ -152,12 +151,7 @@ template <class F> static auto with_ftp(F fn) {
     std::lock_guard<std::mutex> l(g_ftp_mu);
     for (int attempt = 0;; attempt++) {
         try {
-            if (!g_ftp) {
-                auto c = client();
-                int port = ftp::start_server(c);
-                if (const char *e = getenv("PS5AS_FTP_PORT")) port = atoi(e);   // test hook
-                g_ftp = std::make_unique<ftp::Session>(c.host, port);
-            }
+            if (!g_ftp) g_ftp = ftp::open(client().host);
             return fn(*g_ftp);
         } catch (const ps5::Error &) {
             g_ftp.reset();
@@ -566,8 +560,11 @@ static std::set<std::string> game_apply_db(ps5::Client &c, const std::string &id
         const std::string col = art_column(kind);
         std::string value = db.scalar_str("SELECT " + layout::q(col) + " FROM " + layout::q(info.concept_t) + " WHERE localConceptId=?", {concept});
         std::string path = layout::strip_query(value);
-        if (path.empty() || path[0] != '/') continue;
-        std::string base = path.substr(path.find_last_of('/') + 1);
+        // An empty column: the title never had this art (e.g. a homebrew app with no background).
+        // Give it one, in the size and format other titles use. A URL or anything else is left alone.
+        bool none = value.empty();
+        if (!none && path[0] != '/') continue;
+        std::string base = none ? "" : path.substr(path.find_last_of('/') + 1);
         bool in_dir = path == dir + "/" + base, ours = in_dir && base.rfind("psgfx_", 0) == 0;
         if (in_dir && !ours) {   // a real file in the art folder: replacing it in place works
             bool regular = false;
@@ -575,7 +572,11 @@ static std::set<std::string> game_apply_db(ps5::Client &c, const std::string &id
             if (regular) continue;
         }
         Target t;
-        if (!probe_art(read_head(c, path), t)) {
+        if (none) {
+            t.dds = kind != "icon";   // backgrounds are pic0.dds 3840x2160 on the home screen; icons icon0.png
+            t.w = kind == "icon" ? 512 : 3840;
+            t.h = kind == "icon" ? 512 : 2160;
+        } else if (!probe_art(read_head(c, path), t)) {
             t.dds = ends_with(lower(base), ".dds");
             t.w = kind == "icon" ? 512 : t.dds ? 3840 : 1920;
             t.h = kind == "icon" ? 512 : t.dds ? 2160 : 1080;
@@ -587,7 +588,9 @@ static std::set<std::string> game_apply_db(ps5::Client &c, const std::string &id
         if (!originals.contains(col)) originals[col] = value;
         if (ours) replaced.push_back(dir + "/" + base);
         size_t qp = value.find('?');
-        set_art_column(db, info, id, concept, col, dir + "/" + t.name + (qp == std::string::npos ? "" : value.substr(qp)));
+        std::string query = qp != std::string::npos ? value.substr(qp) : none ? "?ts=" + std::to_string(time(nullptr)) : "";
+        set_art_column(db, info, id, concept, col, dir + "/" + t.name + query);
+        if (none) log.push_back(std::string("This title had no ") + (kind == "icon" ? "icon" : "background") + "; added one (experimental: some app types may not show it).");
         done.insert(kind);
     }
     if (done.empty()) return done;

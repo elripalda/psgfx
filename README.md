@@ -29,7 +29,8 @@ It works through [PS5 Upload](https://github.com/phantomptr/ps5upload)'s payload
 
 ## Requirements
 
-- A jailbroken PS5 with **[PS5 Upload](https://github.com/phantomptr/ps5upload)**'s payload running (the same setup you use to upload homebrew).
+- A jailbroken PS5 with **[PS5 Upload](https://github.com/phantomptr/ps5upload)** 6.0 or newer: its payload running on the console and the **PS5 Upload app open on the same PC, connected and paired** with the console. PSGFX goes through the app.
+- For **Home layout** (and art for games whose tiles come from the home-screen database): an FTP server on the PS5 with access to the whole filesystem, such as etaHEN's (port 1337) or ftpsrv (port 2121). PS5 Upload 6 no longer includes one.
 - A Windows PC on the same network.
 
 ## How to use
@@ -50,7 +51,7 @@ To undo, select the app and click **Restore original art**.
 3. Drag games into any order, or use **A–Z** / **Z–A**. Tick **Lock order** to keep it that way after you play other games.
 4. Click **Apply to PS5**, optionally saving the layout as a preset, then restart the PS5.
 
-PSGFX edits the console's home-screen database (`/system_data/priv/mms/app.db`) through PS5 Upload's built-in FTP server, which it starts for you. Backups and presets are kept in the **PSGFX Layout** folder next to `PSGFX.exe`. If the home screen ever looks wrong, restore a backup, or use Safe Mode → **Rebuild Database**. App Library always comes back on its own; the system adds it regardless of the database.
+PSGFX edits the console's home-screen database (`/system_data/priv/mms/app.db`) over FTP, using the first server that answers on port 1337 (etaHEN), 2121 (ftpsrv) or 21; set `PSGFX_FTP_PORT` to use another port. Backups and presets are kept in the **PSGFX Layout** folder next to `PSGFX.exe`. If the home screen ever looks wrong, restore a backup, or use Safe Mode → **Rebuild Database**. App Library always comes back on its own; the system adds it regardless of the database.
 
 ![Homebrew app with its current background](docs/screenshot-homebrew.png)
 
@@ -80,18 +81,18 @@ On Windows, run `./build.sh` from an [MSYS2](https://www.msys2.org/) MinGW shell
 
 ### How it works
 
-PSGFX runs a small local web server (127.0.0.1 only) and opens your browser to it. It talks to PS5 Upload's payload over its FTX2 protocol on ports 9113 and 9114. It uses the payload's existing commands to list apps, read files, upload them (BLAKE3-verified), copy, and back up. Homebrew art is written to the app's `sce_sys` folder and to the home-screen metadata folder. Game art is written to `/user/appmeta/<title id>` in the same size and format as the original files. When the home-screen database (`app.db`) shows the game's tile art coming from somewhere PSGFX can't write, such as inside the game's own package, PSGFX writes the image to `/user/appmeta/<title id>/psgfx_*` and points the database at it. It keeps the original paths in `psgfx_original.json` for **Restore original art** and backs up the database first, as Home layout does. Backgrounds are encoded as BC7 DDS where the console uses DDS.
+PSGFX runs a small local web server (127.0.0.1 only) and opens your browser to it. It talks to the PS5 Upload app's local engine (HTTP on 127.0.0.1:19113), which holds the paired, encrypted AVA1 session with the console's payload (port 9120). It uses the payload's existing commands through the engine to list apps, read files, write them, copy, and back up. Homebrew art is written to the app's `sce_sys` folder and to the home-screen metadata folder. Game art is written to `/user/appmeta/<title id>` in the same size and format as the original files. When the home-screen database (`app.db`) shows the game's tile art coming from somewhere PSGFX can't write, such as inside the game's own package, PSGFX writes the image to `/user/appmeta/<title id>/psgfx_*` and points the database at it. It keeps the original paths in `psgfx_original.json` for **Restore original art** and backs up the database first, as Home layout does. Backgrounds are encoded as BC7 DDS where the console uses DDS.
 
-`tools/mock_ps5.py` is a stand-in for the payload that serves a folder on your computer as if it were a PS5. Use it to develop without a console:
+`tools/mock_engine.py` is a stand-in for the PS5 Upload engine that serves a folder on your computer as if it were a PS5. Use it to develop without a console:
 
 ```bash
-python3 tools/mock_ps5.py ./fake-ps5 39114 39113 &
-PS5AS_HOST=127.0.0.1 PS5AS_MGMT_PORT=39114 PS5AS_XFER_PORT=39113 ./build/psgfx
+python3 tools/mock_engine.py ./fake-ps5 39113 &
+PSGFX_ENGINE_PORT=39113 ./build/psgfx
 ```
 
 ## Credits
 
-- [PS5 Upload](https://github.com/phantomptr/ps5upload) by phantomptr, whose payload PSGFX talks to
+- [PS5 Upload](https://github.com/phantomptr/ps5upload) by phantomptr, whose app and payload PSGFX talks to
 - [bc7enc](https://github.com/richgel999/bc7enc) by Rich Geldreich, [stb](https://github.com/nothings/stb) by Sean Barrett, [BLAKE3](https://github.com/BLAKE3-team/BLAKE3), [JSON for Modern C++](https://github.com/nlohmann/json) by Niels Lohmann, and the [Sora](https://github.com/sora-xor/sora-font) typeface. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
