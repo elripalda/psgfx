@@ -28,6 +28,12 @@
 #include <shellapi.h>
 #include <tlhelp32.h>
 #endif
+#ifndef _WIN32
+#include <csignal>
+#endif
+#ifdef __APPLE__
+void mac_run_app(const std::string &url);   // mac_app.mm: the window that shows the UI
+#endif
 #define STUDIO_VERSION "2.0"
 // Community icons server (community-server/ in this repo). psgfx.json "community" overrides it; empty hides the feature.
 #ifndef PSGFX_COMMUNITY
@@ -1073,6 +1079,19 @@ static void handle(sock_t s, Req &r) {
     }
 }
 
+// Accepts browser connections forever, one thread per request.
+static void serve(sock_t ls) {
+    for (;;) {
+        sock_t s = accept(ls, nullptr, nullptr);
+        if (s == SOCK_BAD) continue;
+        std::thread([s] {
+            Req r;
+            if (read_request(s, r)) handle(s, r);
+            sock_close(s);
+        }).detach();
+    }
+}
+
 int main(int argc, char **argv) {
 #ifdef _WIN32
     WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -1097,6 +1116,16 @@ int main(int argc, char **argv) {
         if (snap != INVALID_HANDLE_VALUE) CloseHandle(snap);
         if (closed) printf("  Closed an older PSGFX window.\n");
     }
+#else
+    signal(SIGPIPE, SIG_IGN);   // a browser that drops a connection mid-response must not kill the server
+#endif
+#ifdef __APPLE__
+    // Config and home-layout backups live in ~/Library/Application Support/PSGFX, not inside the .app.
+    if (const char *home = getenv("HOME"); home && *home) {
+        std::string dir = std::string(home) + "/Library/Application Support/PSGFX/";
+        std::error_code ec; fs::create_directories(dir, ec);
+        g_config_path = dir + "psgfx.json"; g_data_dir = dir + "PSGFX Layout";
+    }
 #endif
     load_config();
     (void)argc; (void)argv;
@@ -1116,18 +1145,22 @@ int main(int argc, char **argv) {
     }
     if (!port || listen(ls, 16) != 0) { fprintf(stderr, "Couldn't open a local port.\n"); return 1; }
     std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
+#ifdef __APPLE__
+    printf("\n  PSGFX " STUDIO_VERSION " is running at %s.\n  Quit from the PSGFX window or with Cmd-Q.\n\n", url.c_str());
+#else
     printf("\n  PSGFX " STUDIO_VERSION " is running.\n  Open %s if your browser didn't open.\n  Close this window to quit.\n\n", url.c_str());
+#endif
     fflush(stdout);
 #ifdef _WIN32
     ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #endif
-    for (;;) {
-        sock_t s = accept(ls, nullptr, nullptr);
-        if (s == SOCK_BAD) continue;
-        std::thread([s] {
-            Req r;
-            if (read_request(s, r)) handle(s, r);
-            sock_close(s);
-        }).detach();
-    }
+#ifdef __APPLE__
+    std::thread(serve, ls).detach();
+    // Quitting calls exit(), which would run global destructors under request threads still in flight; skip them.
+    std::atexit([] { fflush(nullptr); _exit(0); });
+    mac_run_app(url);           // the PSGFX window; never returns (quitting exits the process)
+    return 0;
+#else
+    serve(ls);
+#endif
 }

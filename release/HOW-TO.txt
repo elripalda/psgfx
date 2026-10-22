@@ -3,14 +3,18 @@ Custom icons and backgrounds for your PS5 homebrew and games, and your home-scre
 
 BEFORE YOU START
  - PS5 Upload's payload must be running on your PS5 (the same setup you use to upload homebrew).
- - The PS5 Upload app (version 6 or newer) must be open on this PC and connected
+ - The PS5 Upload app (version 6 or newer) must be open on this computer and connected
    to your PS5. PSGFX does its work through it.
- - Your PC and PS5 must be on the same network.
+ - Your computer and PS5 must be on the same network.
 
 STEPS
- 1. Double-click PSGFX.exe. PSGFX opens in your browser.
-    (If Windows SmartScreen warns, click "More info" > "Run anyway".
-     If the firewall asks, allow it on private networks.)
+ 1. Windows: double-click PSGFX.exe; PSGFX opens in your browser.
+    Mac: open PSGFX.app; PSGFX opens its own window.
+    (Windows: if SmartScreen warns, click "More info" > "Run anyway"; if the firewall asks,
+     allow it on private networks.
+     Mac: if macOS says it can't verify PSGFX, open System Settings > Privacy & Security
+     (macOS 12 and older: System Preferences > Security & Privacy > General),
+     click "Open Anyway", then open PSGFX again.)
  2. PSGFX asks for your PS5's IP address. Type it and click Connect.
     (Next time it connects by itself. Click the connection button at the top to change it.)
  3. Pick a homebrew app or an installed game from the list.
@@ -37,12 +41,12 @@ HOME LAYOUT (new in 1.1)
  2. Select a tile: choose Games, Media or Hidden, or rename it.
  3. Drag games into order or use A-Z / Z-A. Tick "Lock order" to keep it.
  4. Click "Apply to PS5" (optionally save it as a preset), then restart the PS5.
- - Backups and presets live in the "PSGFX Layout" folder next to PSGFX.exe.
+ - Backups and presets live in the "PSGFX Layout" folder next to PSGFX.exe (Mac: in ~/Library/Application Support/PSGFX).
    Use "Backups" to undo, or Safe Mode > Rebuild Database as a last resort.
  - After a firmware update, open "Presets", load your layout and apply it again.
 
 TIPS
  - Best results: icons 512x512 or larger, backgrounds 3840x2160.
  - A game update may bring back that game's original art. Just apply yours again.
- - Your PS5 IP is saved in psgfx.json next to PSGFX.exe.
- - To quit, close the black console window.
+ - Your PS5 IP is saved in psgfx.json next to PSGFX.exe (Mac: in ~/Library/Application Support/PSGFX).
+ - To quit: Windows, close the black console window; Mac, close the PSGFX window or press Cmd-Q.

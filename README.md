@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/elripalda/psgfx/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/elripalda/psgfx?label=release&color=3b8cff"></a>
-  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-1f5fd6">
+  <img alt="Platform: Windows | macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-1f5fd6">
   <img alt="For jailbroken PS5" src="https://img.shields.io/badge/for-jailbroken%20PS5-5cd3ff">
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-a9a6ff"></a>
 </p>
@@ -22,7 +22,7 @@
 
 PSGFX gives your PS5 homebrew and games new home-screen art, and lets you arrange the home screen itself: hide tiles like the PlayStation Store, rename anything, move apps between Games and Media, and lock your games in the order you want. Pick an app, drop in any image, and click **Apply**. PSGFX resizes and converts it to the exact format the console expects, uploads it to the right folder, and keeps a backup of the original so you can undo it with one click.
 
-It works through [PS5 Upload](https://github.com/phantomptr/ps5upload): keep the PS5 Upload app open on your PC, connected to your console, and PSGFX does its work through it. There's nothing else to install: PSGFX is a single `.exe`.
+It works through [PS5 Upload](https://github.com/phantomptr/ps5upload): keep the PS5 Upload app open on the same computer, connected to your console, and PSGFX does its work through it. There's nothing else to install: PSGFX is a single `.exe` on Windows or a single app on Mac.
 
 ![Previewing a new icon and background before applying](docs/screenshot-preview.png)
 
@@ -42,17 +42,17 @@ It works through [PS5 Upload](https://github.com/phantomptr/ps5upload): keep the
 - **Lock order.** Keeps your arrangement in place even after you play other games.
 - **Layout presets.** Save a layout when you apply it and re-apply it in one click after a firmware update or database rebuild resets the home screen.
 - **Home-screen backups.** PSGFX saves the home-screen database before every layout change, plus a copy of the very first one it read. Restore any of them from the Backups dialog.
-- **No setup.** A single portable Windows app that opens in your browser. It remembers your PS5's IP address.
+- **No setup.** A single portable app: on Windows it opens in your browser, on Mac in its own window. It remembers your PS5's IP address.
 
 ## Requirements
 
 - A jailbroken PS5 with **[PS5 Upload](https://github.com/phantomptr/ps5upload)**'s payload running (the same setup you use to upload homebrew).
-- **The PS5 Upload app, version 6 or newer, open on the same PC and connected to your PS5.** PSGFX 1.2 and later go through it; PSGFX 1.1 and older only work with PS5 Upload 5.x.
-- A Windows PC on the same network.
+- **The PS5 Upload app, version 6 or newer, open on the same computer and connected to your PS5.** PSGFX 1.2 and later go through it; PSGFX 1.1 and older only work with PS5 Upload 5.x.
+- A Windows PC or a Mac (macOS 11 or newer) on the same network.
 
 ## How to use
 
-1. Download `PSGFX.exe` from the [latest release](../../releases/latest) and double-click it. PSGFX opens in your browser.
+1. Download `PSGFX-windows.zip` or `PSGFX-macos.zip` from the [latest release](../../releases/latest). Windows: double-click `PSGFX.exe` and PSGFX opens in your browser. Mac: open `PSGFX.app` and PSGFX opens its own window.
 2. Open PS5 Upload and make sure it's connected to your PS5.
 3. PSGFX asks for your PS5's IP address (the same one PS5 Upload uses). Enter it and click **Connect**. Next time it connects by itself.
 4. Choose a homebrew app or an installed game from the list.
@@ -71,7 +71,7 @@ To undo, select the app and click **Restore original**.
 
 ![Home layout with the console-style preview](docs/screenshot-layout.png)
 
-PSGFX edits the console's home-screen database (`/system_data/priv/mms/app.db`) through PS5 Upload. It uploads the new database to `/data/psgfx` and has PS5 Upload's console shell copy it into place, then reads it back to check it. Backups and presets are kept in the **PSGFX Layout** folder next to `PSGFX.exe`. If the home screen ever looks wrong, restore a backup, or use Safe Mode → **Rebuild Database**. App Library always comes back on its own; the system adds it regardless of the database.
+PSGFX edits the console's home-screen database (`/system_data/priv/mms/app.db`) through PS5 Upload. It uploads the new database to `/data/psgfx` and has PS5 Upload's console shell copy it into place, then reads it back to check it. Backups and presets are kept in the **PSGFX Layout** folder next to `PSGFX.exe` (on Mac, in `~/Library/Application Support/PSGFX`). If the home screen ever looks wrong, restore a backup, or use Safe Mode → **Rebuild Database**. App Library always comes back on its own; the system adds it regardless of the database.
 
 ### Community icons
 
@@ -86,13 +86,14 @@ The library is run by `community-server/` (a few PHP files on the PSGFX website 
 - **Image sizes:** icons look best at 512 × 512 or larger. Backgrounds look best at 3840 × 2160. PSGFX crops and scales anything else automatically.
 - **Game updates:** the PS5 may put back a game's original art when that game updates. Apply yours again afterwards.
 - **Windows SmartScreen:** the app isn't code-signed, so Windows may warn the first time. Click **More info → Run anyway**. If the firewall asks, allow PSGFX on private networks.
-- **Quitting:** close the black console window.
+- **macOS Gatekeeper:** the app isn't notarized, so macOS blocks the first launch ("Apple could not verify PSGFX" or "the developer cannot be verified"). Open System Settings → Privacy & Security (on macOS 12 and older: System Preferences → Security & Privacy → General), click **Open Anyway**, then open PSGFX again. Or run `xattr -dr com.apple.quarantine /path/to/PSGFX.app` in Terminal.
+- **Quitting:** on Windows close the black console window; on Mac close the PSGFX window or press Cmd-Q.
 
 ![Apply result](docs/screenshot-applied.png)
 
 ## Build from source
 
-PSGFX is plain C++17 with no external dependencies. Everything it needs is in `src/lib` (including the SQLite amalgamation used for Home layout).
+PSGFX is plain C++17 with no external dependencies. Everything it needs is in `src/lib` (including the SQLite amalgamation used for Home layout). The Mac window is one Objective-C++ file, `src/mac_app.mm`, on the system's Cocoa and WebKit.
 
 ```bash
 # Linux / WSL: produces build/PSGFX.exe
@@ -101,9 +102,12 @@ sudo apt install g++-mingw-w64-x86-64
 
 # Native Linux binary for development
 ./build.sh linux
+
+# macOS (Xcode command line tools): produces build/PSGFX.app for Apple Silicon and Intel
+./build.sh mac
 ```
 
-On Windows, run `./build.sh` from an [MSYS2](https://www.msys2.org/) MinGW shell. Pushing a tag such as `v1.0.0` builds the exe on GitHub Actions and attaches it to a release.
+On Windows, run `./build.sh` from an [MSYS2](https://www.msys2.org/) MinGW shell. Pushing a tag such as `v1.0.0` builds the Windows exe and the Mac app on GitHub Actions and attaches both to a release.
 
 ### How it works
 
@@ -114,6 +118,7 @@ PSGFX runs a small local web server (127.0.0.1 only) and opens your browser to i
 ```bash
 python3 tools/mock_engine.py ./fake-ps5 39200 &
 PS5AS_ENGINE=127.0.0.1:39200 ./build/psgfx
+PS5AS_ENGINE=127.0.0.1:39200 ./build/PSGFX.app/Contents/MacOS/PSGFX   # Mac
 ```
 
 If PS5 Upload's engine runs somewhere else (a NAS or Docker), add `"engine": "host:port"` to `psgfx.json`.

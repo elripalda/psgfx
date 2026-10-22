@@ -41,3 +41,32 @@ jobs:
         with:
           files: dist/PSGFX-windows.zip
           generate_release_notes: true
+
+  macos-app:
+    runs-on: macos-latest
+    needs: windows-exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build PSGFX.app
+        run: bash build.sh mac
+
+      - name: Package
+        run: |
+          mkdir -p dist/PSGFX
+          cp -R build/PSGFX.app dist/PSGFX/
+          cp release/HOW-TO.txt dist/PSGFX/
+          cd dist && ditto -c -k --keepParent PSGFX PSGFX-macos.zip
+
+      # Upload the zip itself: GitHub's own artifact zip drops the executable bit, which breaks an .app.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PSGFX-macos
+          path: dist/PSGFX-macos.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PSGFX-macos.zip
+          # no generate_release_notes: the windows-exe job already wrote them; repeating appends a second copy

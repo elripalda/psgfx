@@ -1082,7 +1082,7 @@ $('#lApply').onclick = () => {
 };
 $('#lBackups').onclick = async () => {
   const j = await api('/api/layout/backups');
-  dlg(`<h3>Home screen backups</h3><p>Saved in the "PSGFX Layout" folder next to PSGFX.exe, before every change, plus one of the very first home screen PSGFX read.</p>
+  dlg(`<h3>Home screen backups</h3><p>Saved in the "PSGFX Layout" folder (next to PSGFX.exe on Windows, in ~/Library/Application Support/PSGFX on Mac), before every change, plus one of the very first home screen PSGFX read.</p>
     ${j.backups.length ? j.backups.map(b => `<div class="li"><div>${esc(b.label)}<small>${esc(b.created)} · ${esc(b.ps5)}</small></div><button class="btn sm" data-restore="${esc(b.id)}" ${st.connected ? '' : 'disabled'}>Restore</button></div>`).join('') : '<p class="lnote">No backups yet. One is made the first time you open Home layout.</p>'}
     <div class="acts"><button class="btn primary" data-close>Close</button></div>`);
   document.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
